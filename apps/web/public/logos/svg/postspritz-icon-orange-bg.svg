@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128" role="img" aria-label="PostSpritz icon">
+<rect width="128" height="128" rx="26" fill="#FF5A1F"/><g>
+<path d="M20 54 103 21c5.7-2.3 11.3 3.3 8.9 9L72 106c-2.1 5-9.4 4.8-11.1-.4L49.4 72.1 15 60c-5.2-1.8-5.1-9.1 5-6Z" fill="#FFFFFF"/>
+<path d="M49.4 72.1 100 24 61 83.4Z" fill="#FFFFFF" opacity=".72"/>
+<path d="M8 77H31M2 91H22" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+</g></svg>

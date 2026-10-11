@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 29% 97%;
+    --foreground: 216 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 216 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 10% 10%;
+    --primary: 16 100% 56%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 15 85% 49%;
+    --secondary: 45 15% 92%;
+    --secondary-foreground: 216 10% 10%;
+    --muted: 45 15% 90%;
+    --muted-foreground: 218 4% 47%;
+    --accent: 16 100% 56%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 45 10% 88%;
+    --input: 45 10% 88%;
+    --ring: 16 100% 56%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 216 10% 8%;
+    --foreground: 45 29% 97%;
+    --card: 216 10% 11%;
+    --card-foreground: 45 29% 97%;
+    --popover: 216 10% 11%;
+    --popover-foreground: 45 29% 97%;
+    --primary: 16 100% 56%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 15 85% 49%;
+    --secondary: 216 10% 15%;
+    --secondary-foreground: 45 29% 97%;
+    --muted: 216 10% 14%;
+    --muted-foreground: 218 4% 65%;
+    --accent: 16 100% 56%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 216 10% 18%;
+    --input: 216 10% 18%;
+    --ring: 16 100% 56%;
+  }
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Custom Glassmorphism Cards */
+.chai-card {
+  background: hsla(var(--card), 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid hsla(var(--border), 0.8);
+  border-radius: var(--radius);
+}
+
+.chai-card:hover {
+  border-color: hsla(var(--primary), 0.4);
+  box-shadow: 0 10px 30px -10px hsla(var(--primary), 0.15);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #FF7D4A 0%, #FF5A1F 50%, #E84712 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
