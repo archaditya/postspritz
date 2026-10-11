@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Mail, ArrowLeft, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck, KeyRound } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2, AlertCircle, ArrowRight, ShieldCheck, KeyRound, Loader2 } from 'lucide-react';
 import { apiClient } from '../../lib/api-client';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/card';
+import { PublicChrome } from '../../components/PublicChrome';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -30,126 +31,111 @@ export default function ForgotPasswordPage() {
       await apiClient.post('/auth/forgot-password', { email: email.trim() });
       setSubmitted(true);
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to dispatch password reset request. Please check your email.');
+      setError(
+        err?.response?.data?.message ||
+        'Failed to dispatch password reset request. Please check your email.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute top-1/4 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-40 w-96 h-96 bg-purple-500/10 rounded-full blur-[140px] pointer-events-none" />
-
-      <Card className="w-full max-w-md border-border/80 shadow-2xl relative z-10 backdrop-blur-xl bg-card/90">
-        <CardHeader className="text-center pb-2">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary mx-auto flex items-center justify-center mb-3 border border-primary/20 shadow-lg shadow-primary/10">
-            <KeyRound className="w-6 h-6" />
-          </div>
-          <CardTitle className="text-xl font-extrabold tracking-tight">
-            Reset Your Password
-          </CardTitle>
-          <CardDescription className="text-xs mt-1">
-            Enter your account email and we'll send you a secure verification link to reset your password.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="space-y-4 pt-4">
-          {error && (
-            <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+    <PublicChrome>
+      <div className="max-w-md mx-auto px-4 py-16 sm:px-6 sm:py-24">
+        <Card className="border border-border/80 bg-card/70 backdrop-blur-xl shadow-xl rounded-xl">
+          <CardHeader className="space-y-1 pb-4 text-center">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mx-auto mb-2">
+              <KeyRound className="w-6 h-6" />
             </div>
-          )}
+            <CardTitle className="text-xl font-bold tracking-tight text-foreground">
+              Reset Password
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">
+              Enter your registered work email and we'll dispatch a secure recovery link
+            </CardDescription>
+          </CardHeader>
 
-          {submitted ? (
-            <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5" />
+          <CardContent className="space-y-4">
+            {error && (
+              <div className="p-3.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span className="leading-snug">{error}</span>
               </div>
-              <div>
-                <p className="text-sm font-bold text-foreground">Reset Instructions Dispatched</p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  If an account exists for <strong className="text-foreground">{email}</strong>, you will receive an email with instructions to securely reset your credentials.
+            )}
+
+            {submitted ? (
+              <div className="space-y-4 text-center py-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-foreground">Recovery Link Dispatched</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  If an account exists with <strong className="text-foreground">{email}</strong>, you will receive password reset instructions shortly.
                 </p>
-              </div>
-
-              <div className="pt-2 flex flex-col gap-2">
-                <Link href={`/reset-password`}>
-                  <Button variant="outline" size="sm" className="w-full text-xs gap-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
-                    Have a Reset Token? Reset Now <ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSubmitted(false);
-                    setEmail('');
-                  }}
-                  className="text-xs text-muted-foreground"
-                >
-                  Try another email
+                <Button asChild variant="outline" className="w-full justify-center h-10 text-xs">
+                  <Link href="/login">Return to Sign In</Link>
                 </Button>
               </div>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} noValidate className="space-y-4 text-xs">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-muted-foreground font-medium">Account Email</label>
-                  {touched && isEmailValid && (
-                    <span className="text-emerald-400 text-[10px] flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Valid format
-                    </span>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">Registered Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setTouched(true);
+                      }}
+                      className={`pl-9 h-10 text-xs bg-background/70 ${
+                        touched && !isEmailValid ? 'border-destructive focus-visible:ring-destructive' : ''
+                      }`}
+                    />
+                  </div>
+                  {touched && !isEmailValid && (
+                    <p className="text-[11px] text-destructive font-medium">
+                      Please enter a valid email address
+                    </p>
                   )}
                 </div>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (error) setError(null);
-                    }}
-                    onBlur={() => setTouched(true)}
-                    placeholder="admin@postspritz.com"
-                    required
-                    className={`pl-9 pr-4 text-xs transition-colors ${
-                      touched && !isEmailValid ? 'border-destructive focus-visible:ring-destructive/30' : ''
-                    }`}
-                  />
+
+                <Button
+                  type="submit"
+                  variant="glow"
+                  disabled={loading}
+                  className="w-full justify-center h-10 text-xs font-semibold gap-2 mt-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending Recovery Link...
+                    </>
+                  ) : (
+                    <>
+                      Send Reset Instructions
+                      <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                    </>
+                  )}
+                </Button>
+
+                <div className="pt-3 text-center border-t border-border/50">
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-medium"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Back to Sign In
+                  </Link>
                 </div>
-                {touched && !isEmailValid && (
-                  <p className="text-[11px] text-destructive flex items-center gap-1 mt-1 font-medium">
-                    <AlertCircle className="w-3 h-3" /> Please provide a valid email address.
-                  </p>
-                )}
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading || (touched && !isEmailValid)}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-2.5 shadow-lg shadow-primary/20 gap-2"
-              >
-                {loading ? 'Sending Instructions...' : 'Send Reset Link'}
-                {!loading && <ArrowRight className="w-3.5 h-3.5" />}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-
-        <CardFooter className="flex justify-center border-t border-border/40 pt-4">
-          <Link
-            href="/login"
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors font-medium"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
-          </Link>
-        </CardFooter>
-      </Card>
-    </div>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </PublicChrome>
   );
 }

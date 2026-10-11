@@ -16,25 +16,18 @@ import {
   XCircle,
   AlertTriangle,
   Server,
-  Layers,
   Sparkles,
   Smartphone,
   Globe,
-  ExternalLink,
-  Flame,
   Clock,
   Coins,
   ShieldCheck,
-  ChevronRight,
   Eye,
   Wallet,
-  CreditCard,
   Share2,
   FileText,
   Copy,
   Check,
-  Shield,
-  X,
   Lock,
 } from 'lucide-react';
 import { apiClient } from '../../../lib/api-client';
@@ -46,6 +39,8 @@ import { Textarea } from '../../../components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../../components/ui/tabs';
 import { Avatar } from '../../../components/ui/avatar';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../../components/ui/dialog';
+import { StatCard } from '../../../components/StatCard';
+import { DataTable, Column } from '../../../components/common/table/DataTable';
 import { formatCurrency } from '../../../lib/utils';
 
 export default function AdminGovernancePage() {
@@ -106,7 +101,6 @@ export default function AdminGovernancePage() {
   const {
     data: userDetail,
     isLoading: userDetailLoading,
-    refetch: refetchUserDetail,
   } = useQuery({
     queryKey: ['admin-user-detail', selectedUserId],
     queryFn: async () => {
@@ -206,20 +200,177 @@ export default function AdminGovernancePage() {
     { name: 'Reddit Submit Post API', status: 'CLOSED', latency: '180ms', uptime: '100%' },
   ];
 
+  // User Directory Columns Definition
+  const userColumns: Column<any>[] = [
+    {
+      key: 'name',
+      header: 'User Profile',
+      render: (u) => (
+        <div className="flex items-center gap-2.5">
+          <Avatar
+            src={u.avatar_url || u.profile_image_url}
+            alt={u.name || 'User'}
+            className="w-8 h-8 border-border ring-1 ring-primary/20 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-foreground text-xs truncate">{u.name || 'Anonymous User'}</span>
+              {u.email_verified && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+            </div>
+            <p className="text-[11px] text-muted-foreground truncate">{u.email}</p>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(u.id, u.id);
+              }}
+              className="text-[9px] text-muted-foreground/60 hover:text-foreground font-mono flex items-center gap-1 mt-0.5"
+            >
+              ID: {u.id.substring(0, 8)}...
+              {copiedId === u.id ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'role',
+      header: 'Role & Tier',
+      render: (u) => (
+        <div className="space-y-1">
+          <Badge
+            variant="outline"
+            className={`text-[9px] uppercase font-bold py-0.5 ${
+              u.role === 'superadmin'
+                ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10'
+                : u.role === 'admin'
+                ? 'border-purple-500/50 text-purple-400 bg-purple-500/10'
+                : 'border-border text-muted-foreground'
+            }`}
+          >
+            {u.role}
+          </Badge>
+          <p className="capitalize font-semibold text-primary text-[11px]">{u.plan_name || 'Free Starter'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'connected_channels',
+      header: 'Platform Setups',
+      render: (u) => {
+        const channels = Array.isArray(u.connected_channels) ? u.connected_channels : [];
+        if (channels.length === 0) {
+          return <span className="text-[11px] text-muted-foreground/60 italic">No channels connected</span>;
+        }
+        return (
+          <div className="flex flex-wrap gap-1 max-w-xs">
+            {channels.map((ch: any, idx: number) => (
+              <Badge key={idx} variant="outline" className="text-[10px] py-0.5 px-2 bg-muted/30 border-border/70 text-foreground gap-1">
+                <span className="capitalize font-semibold">{ch.platform}</span>
+                {ch.username && <span className="text-muted-foreground font-normal">@{ch.username}</span>}
+              </Badge>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'total_posts',
+      header: 'Posts',
+      render: (u) => (
+        <div>
+          <span className="font-mono text-xs font-semibold text-foreground">{u.total_posts ?? 0}</span>
+          <span className="text-[10px] text-muted-foreground block">posts</span>
+        </div>
+      ),
+    },
+    {
+      key: 'wallet_balance_paise',
+      header: 'Fuel Wallet',
+      render: (u) => (
+        <span className="font-mono text-xs font-bold text-emerald-400">
+          {formatCurrency((u.wallet_balance_paise || 0) / 100)}
+        </span>
+      ),
+    },
+    {
+      key: 'ai_tokens_used',
+      header: 'AI Tokens',
+      render: (u) => (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {(u.ai_tokens_used || 0).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (u) => (
+        <Badge variant={u.status === 'active' ? 'success' : 'destructive'} className="text-[10px] capitalize font-semibold">
+          {u.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      className: 'text-right',
+      render: (u) => (
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedUserId(u.id);
+              setInspectorSubTab('platforms');
+            }}
+            className="text-[11px] h-7 px-2.5 gap-1 hover:border-primary hover:text-primary"
+          >
+            <Eye className="w-3 h-3" /> Inspect Setup
+          </Button>
+
+          {u.role !== 'superadmin' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={updateStatusMutation.isPending}
+              onClick={() =>
+                updateStatusMutation.mutate({
+                  id: u.id,
+                  status: u.status === 'active' ? 'suspended' : 'active',
+                })
+              }
+              className={`text-[11px] h-7 px-2.5 ${
+                u.status === 'active'
+                  ? 'hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30'
+                  : 'hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30'
+              }`}
+            >
+              {u.status === 'active' ? 'Suspend' : 'Activate'}
+            </Button>
+          ) : (
+            <Badge variant="outline" className="text-[9px] text-muted-foreground/60">
+              Protected
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-border/40">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-md shadow-indigo-500/10">
+            <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
               <ShieldAlert className="w-5 h-5" />
             </span>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Platform Governance & Observability Hub
             </h1>
           </div>
-          <p className="text-xs md:text-sm text-muted-foreground mt-1 ml-10">
+          <p className="text-xs text-muted-foreground mt-0.5 ml-10">
             Real-time user directory, connected platform setups, wallet ledgers, BullMQ worker queues, and marketing notifications.
           </p>
         </div>
@@ -238,101 +389,46 @@ export default function AdminGovernancePage() {
               refetchQueues();
               refetchAudit();
             }}
-            className="gap-2 text-xs h-9 border-border hover:bg-muted/60"
+            className="gap-2 text-xs h-8 border-border hover:bg-muted/60"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh Telemetry
           </Button>
         </div>
       </div>
 
-      {/* Primary Telemetry Cards (Real Data) */}
+      {/* Primary Telemetry Cards (Using StatCard Component) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Users */}
-        <Card className="relative overflow-hidden border-border/80 bg-gradient-to-br from-card via-card/90 to-card/60 shadow-xl">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between text-muted-foreground mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Platform Users</span>
-              <Users className="w-4 h-4 text-primary" />
-            </div>
-            <div className="text-3xl font-extrabold text-foreground">
-              {statsLoading ? '...' : stats?.users?.total ?? 0}
-            </div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
-              <span className="text-emerald-400 font-medium">
-                {stats?.users?.active ?? 0} Active
-              </span>
-              <span className="text-muted-foreground">
-                {(stats?.users?.total ?? 0) - (stats?.users?.active ?? 0)} Inactive
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Platform Users"
+          value={statsLoading ? '...' : stats?.users?.total ?? 0}
+          subtitle={`${stats?.users?.active ?? 0} active users`}
+          icon={Users}
+        />
 
-        {/* Real BullMQ Queue Jobs */}
-        <Card className="relative overflow-hidden border-border/80 bg-gradient-to-br from-card via-card/90 to-card/60 shadow-xl">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl" />
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between text-muted-foreground mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Queue Workers</span>
-              <Server className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-foreground">
-              4 Workers
-            </div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
-              <span className="text-indigo-400 font-medium">
-                Publisher · Refresh · Notif · Cleanup
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Queue Workers"
+          value="4 Workers"
+          subtitle="Publisher · Refresh · Notif · Cleanup"
+          icon={Server}
+        />
 
-        {/* AI Generations & Tokens */}
-        <Card className="relative overflow-hidden border-border/80 bg-gradient-to-br from-card via-card/90 to-card/60 shadow-xl">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-2xl" />
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between text-muted-foreground mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">AI Generation Logs</span>
-              <Coins className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-foreground">
-              {statsLoading ? '...' : (stats?.aiUsage?.tokensConsumed ?? 0).toLocaleString()}
-            </div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
-              <span className="text-muted-foreground">
-                {stats?.aiUsage?.generations ?? 0} Generations
-              </span>
-              <span className="text-amber-400 font-mono">
-                ${(stats?.aiUsage?.estimatedCostUsd ?? 0).toFixed(4)} USD
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="AI Generation Logs"
+          value={statsLoading ? '...' : (stats?.aiUsage?.tokensConsumed ?? 0).toLocaleString()}
+          subtitle={`${stats?.aiUsage?.generations ?? 0} total generations`}
+          icon={Coins}
+        />
 
-        {/* Push Notification Devices */}
-        <Card className="relative overflow-hidden border-border/80 bg-gradient-to-br from-card via-card/90 to-card/60 shadow-xl">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl" />
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between text-muted-foreground mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Push Subscribers</span>
-              <Radio className="w-4 h-4 text-purple-400" />
-            </div>
-            <div className="text-3xl font-extrabold text-foreground">
-              {statsLoading ? '...' : stats?.pushNotifications?.registeredDevices ?? 0}
-            </div>
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
-              <span className="text-purple-400 font-medium">
-                {stats?.pushNotifications?.usersSubscribed ?? 0} Users with FCM
-              </span>
-              <span className="text-emerald-400 font-mono">Firebase WebPush</span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Push Subscribers"
+          value={statsLoading ? '...' : stats?.pushNotifications?.registeredDevices ?? 0}
+          subtitle="Firebase Cloud Messaging (FCM)"
+          icon={Radio}
+        />
       </div>
 
       {/* Main Navigation Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
         <TabsList className="bg-card/70 border border-border/60 p-1 rounded-2xl flex flex-wrap gap-1">
           <TabsTrigger value="users" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
             <Users className="w-3.5 h-3.5" /> User Directory
@@ -341,7 +437,7 @@ export default function AdminGovernancePage() {
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="broadcast" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-            <Radio className="w-3.5 h-3.5 text-amber-300" /> Broadcast & Marketing Studio
+            <Radio className="w-3.5 h-3.5 text-amber-300" /> Broadcast Studio
           </TabsTrigger>
           <TabsTrigger value="queues" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
             <Server className="w-3.5 h-3.5" /> Background Queues
@@ -353,226 +449,46 @@ export default function AdminGovernancePage() {
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="overview" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Activity className="w-3.5 h-3.5" /> Circuit Breakers & Health
+            <Activity className="w-3.5 h-3.5" /> Circuit Breakers
           </TabsTrigger>
         </TabsList>
 
         {/* 1. REAL USER DIRECTORY TAB (PRIMARY FOCUS) */}
-        <TabsContent value="users" className="space-y-6">
-          <Card className="border-border/80 shadow-2xl">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" /> Platform User Directory & Channel Governance
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-1">
-                    Inspect user profiles, connected social accounts, fuel wallets, post counts, and API token usage.
-                  </CardDescription>
-                </div>
-                <div className="relative w-full sm:w-80">
-                  <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
-                  <Input
-                    placeholder="Filter by name, email, or user ID..."
-                    value={userSearch}
-                    onChange={(e) => {
-                      setUserSearch(e.target.value);
-                      setUserPage(1);
-                    }}
-                    className="pl-9 h-9 text-xs"
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {usersLoading ? (
-                <div className="py-16 text-center text-xs text-muted-foreground space-y-3">
-                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p>Querying real database user registry...</p>
-                </div>
-              ) : !usersData?.data || usersData.data.length === 0 ? (
-                <div className="py-16 text-center text-xs text-muted-foreground border border-dashed rounded-xl bg-muted/10">
-                  <Users className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                  <p className="font-semibold text-foreground">No matching users found</p>
-                  <p className="mt-1">Try clearing your search query filter.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="text-muted-foreground border-b border-border/60 uppercase text-[10px] tracking-wider font-semibold">
-                      <tr>
-                        <th className="pb-3 px-3">User Profile</th>
-                        <th className="pb-3 px-3">Role & Tier</th>
-                        <th className="pb-3 px-3">Connected Channels</th>
-                        <th className="pb-3 px-3">Posts</th>
-                        <th className="pb-3 px-3">Fuel Wallet</th>
-                        <th className="pb-3 px-3">AI Tokens</th>
-                        <th className="pb-3 px-3">Status</th>
-                        <th className="pb-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40 font-medium">
-                      {usersData.data.map((u: any) => {
-                        const channels = Array.isArray(u.connected_channels) ? u.connected_channels : [];
-                        return (
-                          <tr key={u.id} className="hover:bg-muted/30 transition-colors">
-                            {/* User Profile */}
-                            <td className="py-3.5 px-3">
-                              <div className="flex items-center gap-3">
-                                <Avatar
-                                  src={u.avatar_url}
-                                  alt={u.name || 'User'}
-                                  className="w-9 h-9 border-border ring-1 ring-primary/20"
-                                />
-                                <div>
-                                  <div className="flex items-center gap-1.5">
-                                    <p className="font-bold text-foreground text-xs">{u.name || 'Anonymous User'}</p>
-                                    {u.email_verified && (
-                                      <span title="Email Verified">
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-[11px] text-muted-foreground">{u.email}</p>
-                                  <button
-                                    onClick={() => copyToClipboard(u.id, u.id)}
-                                    className="text-[9px] text-muted-foreground/70 hover:text-foreground font-mono flex items-center gap-1 mt-0.5"
-                                    title="Click to copy ID"
-                                  >
-                                    ID: {u.id.substring(0, 8)}...
-                                    {copiedId === u.id ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
+        <TabsContent value="users" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Platform User Governance</h2>
+              <p className="text-xs text-muted-foreground">
+                Inspect registered users, active subscriptions, connected channels, and wallet fuel.
+              </p>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+              <Input
+                placeholder="Search by name, email, or user ID..."
+                value={userSearch}
+                onChange={(e) => {
+                  setUserSearch(e.target.value);
+                  setUserPage(1);
+                }}
+                className="pl-9 h-9 text-xs"
+              />
+            </div>
+          </div>
 
-                            {/* Role & Plan */}
-                            <td className="py-3.5 px-3">
-                              <div className="space-y-1">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[9px] uppercase font-bold py-0.5 ${
-                                    u.role === 'superadmin'
-                                      ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10'
-                                      : u.role === 'admin'
-                                      ? 'border-purple-500/50 text-purple-400 bg-purple-500/10'
-                                      : 'border-border text-muted-foreground'
-                                  }`}
-                                >
-                                  {u.role}
-                                </Badge>
-                                <div>
-                                  <span className="capitalize font-semibold text-primary text-[11px]">
-                                    {u.plan_name || 'Free Starter'}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Connected Channels / Setups */}
-                            <td className="py-3.5 px-3">
-                              {channels.length === 0 ? (
-                                <span className="text-[11px] text-muted-foreground/60 italic">
-                                  No channels connected
-                                </span>
-                              ) : (
-                                <div className="flex flex-wrap gap-1 max-w-xs">
-                                  {channels.map((ch: any, idx: number) => (
-                                    <Badge
-                                      key={idx}
-                                      variant="outline"
-                                      className="text-[10px] py-0.5 px-2 bg-muted/40 border-border/80 gap-1 text-foreground"
-                                    >
-                                      <span className="capitalize font-semibold">{ch.platform}</span>
-                                      {ch.username && (
-                                        <span className="text-muted-foreground font-normal">@{ch.username}</span>
-                                      )}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Posts Count */}
-                            <td className="py-3.5 px-3">
-                              <span className="font-mono text-xs font-semibold text-foreground">
-                                {u.total_posts ?? 0}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground block">posts</span>
-                            </td>
-
-                            {/* Fuel Wallet */}
-                            <td className="py-3.5 px-3">
-                              <span className="font-mono text-xs font-bold text-emerald-400">
-                                {formatCurrency((u.wallet_balance_paise || 0) / 100)}
-                              </span>
-                            </td>
-
-                            {/* AI Tokens Used */}
-                            <td className="py-3.5 px-3 font-mono text-[11px] text-muted-foreground">
-                              {(u.ai_tokens_used || 0).toLocaleString()}
-                            </td>
-
-                            {/* Account Status */}
-                            <td className="py-3.5 px-3">
-                              <Badge
-                                variant={u.status === 'active' ? 'success' : 'destructive'}
-                                className="text-[10px] capitalize font-semibold"
-                              >
-                                {u.status}
-                              </Badge>
-                            </td>
-
-                            {/* Governance Actions */}
-                            <td className="py-3.5 px-3 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedUserId(u.id);
-                                    setInspectorSubTab('platforms');
-                                  }}
-                                  className="text-[11px] h-7 px-2.5 gap-1 hover:border-primary hover:text-primary"
-                                >
-                                  <Eye className="w-3 h-3" /> Inspect Setup
-                                </Button>
-
-                                {u.role !== 'superadmin' ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={updateStatusMutation.isPending}
-                                    onClick={() =>
-                                      updateStatusMutation.mutate({
-                                        id: u.id,
-                                        status: u.status === 'active' ? 'suspended' : 'active',
-                                      })
-                                    }
-                                    className={`text-[11px] h-7 px-2.5 ${
-                                      u.status === 'active'
-                                        ? 'hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30'
-                                        : 'hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/30'
-                                    }`}
-                                  >
-                                    {u.status === 'active' ? 'Suspend' : 'Activate'}
-                                  </Button>
-                                ) : (
-                                  <Badge variant="outline" className="text-[9px] text-muted-foreground/60">
-                                    Protected
-                                  </Badge>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <DataTable
+            data={usersData?.data || []}
+            columns={userColumns}
+            loading={usersLoading}
+            emptyMessage="No registered users found matching query."
+            rowKey={(u) => u.id}
+            pagination={{
+              page: userPage,
+              pageSize: 15,
+              total: usersData?.total || 0,
+              onPageChange: (p) => setUserPage(p),
+            }}
+          />
         </TabsContent>
 
         {/* 2. DEDICATED PROMOTIONAL & PUSH BROADCAST STUDIO TAB */}
@@ -580,11 +496,11 @@ export default function AdminGovernancePage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Broadcast Composer Form */}
             <div className="lg:col-span-7">
-              <Card className="border-border/80 shadow-xl">
+              <Card className="border-border/80 shadow-md">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2">
                         <Radio className="w-4 h-4 text-indigo-400" /> Platform Notification Broadcast Center
                       </CardTitle>
                       <CardDescription className="text-xs mt-1">
@@ -596,11 +512,11 @@ export default function AdminGovernancePage() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-5">
+                <CardContent className="space-y-4">
                   {/* Preset Templates */}
                   <div>
-                    <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">
-                      Quick Marketing & System Presets
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">
+                      Quick Presets
                     </label>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -657,11 +573,10 @@ export default function AdminGovernancePage() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleBroadcastSubmit} className="space-y-4">
-                    {/* Title */}
+                  <form onSubmit={handleBroadcastSubmit} className="space-y-3.5">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-semibold text-foreground">Notification Headline / Title *</label>
+                        <label className="text-xs font-semibold text-foreground">Notification Title *</label>
                         <span className="text-[10px] text-muted-foreground">{broadcastForm.title.length}/100</span>
                       </div>
                       <Input
@@ -674,7 +589,6 @@ export default function AdminGovernancePage() {
                       />
                     </div>
 
-                    {/* Body */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs font-semibold text-foreground">Message Body *</label>
@@ -684,14 +598,13 @@ export default function AdminGovernancePage() {
                         required
                         maxLength={350}
                         rows={3}
-                        placeholder="Provide details about the promotional offer, maintenance schedule, or platform update..."
+                        placeholder="Provide details about the promotional offer or system message..."
                         value={broadcastForm.body}
                         onChange={(e) => setBroadcastForm({ ...broadcastForm, body: e.target.value })}
                         className="text-xs"
                       />
                     </div>
 
-                    {/* Type & Channel Filters */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="text-xs font-semibold text-foreground block mb-1">Type</label>
@@ -740,33 +653,25 @@ export default function AdminGovernancePage() {
                       </div>
                     </div>
 
-                    {/* Action URL */}
                     <div>
                       <label className="text-xs font-semibold text-foreground block mb-1">Click Action URL (Optional)</label>
                       <Input
-                        placeholder="e.g. /dashboard/billing or /dashboard/compose"
+                        placeholder="e.g. /dashboard/billing or /dashboard"
                         value={broadcastForm.actionUrl}
                         onChange={(e) => setBroadcastForm({ ...broadcastForm, actionUrl: e.target.value })}
                         className="text-xs"
                       />
                     </div>
 
-                    {/* Result alert */}
                     {broadcastResult && (
-                      <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 shrink-0" />
                           <span>
-                            Broadcast delivered to <strong>{broadcastResult.recipients}</strong> user accounts ({broadcastResult.inAppDelivered} In-App, {broadcastResult.pushDispatched} Push Multicasts dispatched).
+                            Delivered to <strong>{broadcastResult.recipients}</strong> user accounts ({broadcastResult.inAppDelivered} In-App, {broadcastResult.pushDispatched} Push Multicasts dispatched).
                           </span>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setBroadcastResult(null)}
-                          className="h-6 text-xs"
-                        >
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setBroadcastResult(null)} className="h-6 text-xs">
                           Dismiss
                         </Button>
                       </div>
@@ -775,10 +680,10 @@ export default function AdminGovernancePage() {
                     <Button
                       type="submit"
                       disabled={broadcastMutation.isPending || !broadcastForm.title || !broadcastForm.body}
-                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white gap-2 font-bold py-2.5 shadow-lg shadow-indigo-600/25"
+                      className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white gap-2 font-bold py-2 shadow-md shadow-indigo-600/25 text-xs"
                     >
-                      <Send className="w-4 h-4" />
-                      {broadcastMutation.isPending ? 'Dispatching Broadcast...' : 'Dispatch Broadcast to All Channels'}
+                      <Send className="w-3.5 h-3.5" />
+                      {broadcastMutation.isPending ? 'Dispatching Broadcast...' : 'Dispatch Broadcast'}
                     </Button>
                   </form>
                 </CardContent>
@@ -787,18 +692,18 @@ export default function AdminGovernancePage() {
 
             {/* Live Interactive Notification Preview Card */}
             <div className="lg:col-span-5 space-y-4">
-              <Card className="border-border/80 shadow-xl bg-card/60 backdrop-blur-xl">
+              <Card className="border-border/80 shadow-md bg-card/60 backdrop-blur-xl">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-purple-400" /> Real-Time Live Preview
+                    <Smartphone className="w-4 h-4 text-purple-400" /> Live Simulation Preview
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Live simulation of how users will see this notification across WebPush and in-app banners.
+                    How users will receive this notice across browser push and in-app feeds.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Browser WebPush Simulation */}
-                  <div className="rounded-2xl border border-white/10 bg-[#16181D] p-4 shadow-2xl space-y-3">
+                  <div className="rounded-2xl border border-white/10 bg-[#16181D] p-4 shadow-xl space-y-3">
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground pb-2 border-b border-white/5">
                       <div className="flex items-center gap-1.5">
                         <Globe className="w-3.5 h-3.5 text-primary" />
@@ -855,7 +760,7 @@ export default function AdminGovernancePage() {
             <Card className="border-border/80">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Server className="w-4 h-4 text-primary" /> publisher-queue
                   </CardTitle>
                   <Badge variant="success" className="text-[10px]">ACTIVE POOL</Badge>
@@ -890,7 +795,7 @@ export default function AdminGovernancePage() {
             <Card className="border-border/80">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <RefreshCw className="w-4 h-4 text-emerald-400" /> token-refresh-queue
                   </CardTitle>
                   <Badge variant="success" className="text-[10px]">CRON 6H</Badge>
@@ -924,7 +829,7 @@ export default function AdminGovernancePage() {
             <Card className="border-border/80">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Bell className="w-4 h-4 text-purple-400" /> notification-queue
                   </CardTitle>
                   <Badge variant="success" className="text-[10px]">SSE / PUSH</Badge>
@@ -955,7 +860,7 @@ export default function AdminGovernancePage() {
             <Card className="border-border/80">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400" /> cleanup-queue
                   </CardTitle>
                   <Badge variant="success" className="text-[10px]">DAILY CRON</Badge>
@@ -985,63 +890,73 @@ export default function AdminGovernancePage() {
         </TabsContent>
 
         {/* 4. REAL SECURITY AUDIT TRAIL TAB */}
-        <TabsContent value="audit" className="space-y-6">
-          <Card className="border-border/80 shadow-xl">
-            <CardHeader>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Clock className="w-4 h-4 text-primary" /> Security & Activity Audit Trail
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Immutable chronological log of platform administrative actions, user logins, and social authorizations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {auditLoading ? (
-                <div className="py-12 text-center text-xs text-muted-foreground">Loading audit records...</div>
-              ) : !auditData?.data || auditData.data.length === 0 ? (
-                <div className="py-12 text-center text-xs text-muted-foreground">
-                  No security audit records logged yet. Events will appear as administrative actions occur.
-                </div>
-              ) : (
-                <div className="space-y-2 text-xs font-mono">
-                  {auditData.data.map((log: any) => (
-                    <div
-                      key={log.id}
-                      className="p-3 rounded-xl bg-muted/20 border border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-border transition-colors"
-                    >
-                      <div>
-                        <span className="text-indigo-400 font-bold">[{new Date(log.created_at).toLocaleString()}]</span>{' '}
-                        <span className="text-foreground font-semibold">{log.action}</span>
-                        {log.user_email && <span className="text-muted-foreground"> by {log.user_email}</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {log.ip_address && (
-                          <span className="text-[10px] text-muted-foreground">{log.ip_address}</span>
-                        )}
-                        <Badge variant="outline" className="text-[9px] uppercase">
-                          {log.resource_type || 'SYSTEM'}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="audit" className="space-y-4">
+          <div className="flex items-center justify-between pb-1">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Security & Activity Audit Trail</h2>
+              <p className="text-xs text-muted-foreground">
+                Chronological record of platform logins, administrative operations, and provider authorizations.
+              </p>
+            </div>
+          </div>
+
+          <DataTable
+            data={auditData?.data || []}
+            columns={[
+              {
+                key: 'created_at',
+                header: 'Timestamp',
+                render: (l) => (
+                  <span className="text-indigo-400 font-mono text-xs">
+                    [{new Date(l.created_at).toLocaleString()}]
+                  </span>
+                ),
+              },
+              {
+                key: 'action',
+                header: 'Action & Event',
+                render: (l) => (
+                  <div>
+                    <span className="text-foreground font-semibold text-xs">{l.action}</span>
+                    {l.user_email && <p className="text-[11px] text-muted-foreground">Actor: {l.user_email}</p>}
+                  </div>
+                ),
+              },
+              {
+                key: 'resource_type',
+                header: 'Resource',
+                render: (l) => (
+                  <Badge variant="outline" className="text-[9px] uppercase">
+                    {l.resource_type || 'SYSTEM'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'ip_address',
+                header: 'IP Address',
+                render: (l) => (
+                  <span className="text-muted-foreground font-mono text-[11px]">{l.ip_address || '—'}</span>
+                ),
+              },
+            ]}
+            loading={auditLoading}
+            emptyMessage="No audit logs recorded."
+            rowKey={(l) => l.id}
+          />
         </TabsContent>
 
         {/* 5. CIRCUIT BREAKERS & API HEALTH TAB */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border-border/80">
+            <Card className="border-border/80 shadow-sm">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
                       <Zap className="w-4 h-4 text-emerald-400" /> Social Publisher Circuit Breakers
                     </CardTitle>
                     <CardDescription className="text-xs mt-1">
-                      Automated fail-safe circuit trip gates preventing cascade failures during platform API outages.
+                      Fail-safe circuit trip gates preventing cascade failures during platform API outages.
                     </CardDescription>
                   </div>
                   <Badge variant="success" className="text-[10px]">
@@ -1049,11 +964,11 @@ export default function AdminGovernancePage() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2.5">
                 {circuitBreakers.map((cb, idx) => (
                   <div
                     key={idx}
-                    className="p-3.5 rounded-xl border border-border/60 bg-muted/20 flex items-center justify-between text-xs hover:border-border transition-colors"
+                    className="p-3 rounded-xl border border-border/60 bg-muted/20 flex items-center justify-between text-xs hover:border-border transition-colors"
                   >
                     <div>
                       <p className="font-semibold text-foreground">{cb.name}</p>
@@ -1069,9 +984,9 @@ export default function AdminGovernancePage() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/80">
+            <Card className="border-border/80 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
                   <Activity className="w-4 h-4 text-primary" /> Platform Core Health
                 </CardTitle>
                 <CardDescription className="text-xs mt-1">
@@ -1098,12 +1013,12 @@ export default function AdminGovernancePage() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
-                  <p className="text-xs font-semibold text-indigo-300 flex items-center gap-2">
+                <div className="p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-1.5">
+                  <p className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4" /> Proactive Token Refresh Pipeline
                   </p>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Social token auto-refresh runs periodically every 6 hours, re-exchanging expiring Facebook, Instagram, and Threads tokens before expiration without user downtime. Daily retention worker cleans up 30-day purged records automatically.
+                    Social token auto-refresh runs periodically every 6 hours, re-exchanging expiring Facebook, Instagram, and Threads tokens before expiration without user downtime.
                   </p>
                 </div>
               </CardContent>
@@ -1118,12 +1033,12 @@ export default function AdminGovernancePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Avatar
-                src={userDetail?.user?.avatar_url}
+                src={userDetail?.user?.avatar_url || userDetail?.user?.profile_image_url}
                 alt={userDetail?.user?.name || 'User'}
-                className="w-12 h-12 border-2 border-primary/20"
+                className="w-12 h-12 border-2 border-primary/20 shrink-0"
               />
               <div>
-                <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                <DialogTitle className="text-base font-bold flex items-center gap-2">
                   {userDetail?.user?.name || 'User Profile'}
                   <Badge
                     variant="outline"
@@ -1225,12 +1140,12 @@ export default function AdminGovernancePage() {
 
             {/* Sub-Tab 1: Platform Setups */}
             {inspectorSubTab === 'platforms' && (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {!userDetail?.socialAccounts || userDetail.socialAccounts.length === 0 ? (
                   <div className="p-8 text-center text-xs text-muted-foreground border border-dashed rounded-xl bg-muted/10">
                     <Share2 className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="font-semibold text-foreground">No Social Channels Connected</p>
-                    <p className="mt-1">This user has not yet authorized any social accounts (Instagram, LinkedIn, X, Facebook, Threads, Reddit).</p>
+                    <p className="mt-1">User has not authorized any accounts yet.</p>
                   </div>
                 ) : (
                   userDetail.socialAccounts.map((acc: any) => (
@@ -1239,7 +1154,7 @@ export default function AdminGovernancePage() {
                       className="p-3.5 rounded-xl border border-border/70 bg-muted/20 flex items-center justify-between gap-3 text-xs"
                     >
                       <div className="flex items-center gap-3">
-                        <Avatar src={acc.avatar_url} alt={acc.account_name} className="w-9 h-9 border-border" />
+                        <Avatar src={acc.avatar_url} alt={acc.account_name} className="w-9 h-9 border-border shrink-0" />
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-foreground text-xs">{acc.account_name || 'Account'}</span>
@@ -1268,7 +1183,7 @@ export default function AdminGovernancePage() {
 
             {/* Sub-Tab 2: Recent Posts */}
             {inspectorSubTab === 'posts' && (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {!userDetail?.recentPosts || userDetail.recentPosts.length === 0 ? (
                   <div className="p-8 text-center text-xs text-muted-foreground border border-dashed rounded-xl bg-muted/10">
                     <FileText className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -1312,7 +1227,7 @@ export default function AdminGovernancePage() {
                 <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent border border-emerald-500/20 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] uppercase font-bold text-emerald-400 block">Available Fuel Balance</span>
-                    <span className="text-2xl font-extrabold text-foreground font-mono">
+                    <span className="text-2xl font-bold text-foreground font-mono">
                       {formatCurrency((userDetail?.user?.wallet_balance_paise || 0) / 100)}
                     </span>
                   </div>
@@ -1322,7 +1237,7 @@ export default function AdminGovernancePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Recent Wallet Transaction Ledger
                   </p>
                   {!userDetail?.transactions || userDetail.transactions.length === 0 ? (
@@ -1362,12 +1277,12 @@ export default function AdminGovernancePage() {
 
             {/* Sub-Tab 4: Registered Push Devices */}
             {inspectorSubTab === 'devices' && (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {!userDetail?.fcmDevices || userDetail.fcmDevices.length === 0 ? (
                   <div className="p-8 text-center text-xs text-muted-foreground border border-dashed rounded-xl bg-muted/10">
                     <Smartphone className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="font-semibold text-foreground">No FCM Push Devices Registered</p>
-                    <p className="mt-1">User has not enabled browser WebPush notifications on this account.</p>
+                    <p className="mt-1">User has not registered any web push tokens.</p>
                   </div>
                 ) : (
                   userDetail.fcmDevices.map((dev: any) => (

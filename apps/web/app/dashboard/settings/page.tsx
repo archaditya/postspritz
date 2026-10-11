@@ -56,8 +56,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user) {
-      setFullName(user.fullName || '');
-      setProfileImageUrl(user.profileImageUrl || '');
+      setFullName(user.fullName || user.name || '');
+      setProfileImageUrl(user.profileImageUrl || user.avatar_url || '');
       setBio(user.bio || '');
       setCompany(user.company || '');
       setPhone(user.phone || '');

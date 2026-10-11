@@ -19,11 +19,13 @@ export const authenticate = async (req: Request, _res: Response, next: NextFunct
       const token = authHeader.split(' ')[1];
       try {
         const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+        const userRes = await query('SELECT role, name, status FROM users WHERE id = $1', [decoded.userId]);
+        const freshUser = userRes.rows[0];
         req.user = {
           id: decoded.userId,
           email: decoded.email,
-          role: decoded.role,
-          name: decoded.name
+          role: freshUser?.role || decoded.role,
+          name: freshUser?.name || decoded.name,
         };
         return next();
       } catch (jwtErr) {

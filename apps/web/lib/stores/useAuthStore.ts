@@ -4,15 +4,19 @@ import { persist } from 'zustand/middleware';
 export interface UserProfile {
   id: string;
   email: string;
+  name?: string;
   fullName: string;
-  role: 'superadmin' | 'admin' | 'user';
+  role: 'superadmin' | 'admin' | 'creator' | 'user';
+  avatar_url?: string;
   profileImageUrl?: string;
   bio?: string;
   company?: string;
   phone?: string;
   timezone?: string;
   walletBalancePaise: number;
+  wallet_balance_paise?: number;
   planId?: string;
+  plan_name?: string;
   subscriptionStatus?: string;
 }
 

@@ -198,14 +198,16 @@ function ResetPasswordForm() {
   );
 }
 
+import { PublicChrome } from '../../components/PublicChrome';
+
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background relative overflow-hidden">
-      <div className="absolute top-1/4 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <Suspense fallback={<div className="text-xs text-muted-foreground">Loading password reset...</div>}>
-        <ResetPasswordForm />
-      </Suspense>
-    </div>
+    <PublicChrome>
+      <div className="max-w-md mx-auto px-4 py-16 sm:px-6 sm:py-24">
+        <Suspense fallback={<div className="text-xs text-muted-foreground text-center">Loading password reset...</div>}>
+          <ResetPasswordForm />
+        </Suspense>
+      </div>
+    </PublicChrome>
   );
 }

@@ -23,6 +23,7 @@ import { aiContentRoutes } from './modules/ai-content/ai-content.routes';
 import { analyticsRoutes } from './modules/analytics/analytics.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { apiKeysRoutes } from './modules/api-keys/api-keys.routes';
+import { contactRoutes } from './modules/contact/contact.routes';
 
 export const createApp = () => {
   const app = express();
@@ -123,6 +124,7 @@ export const createApp = () => {
   app.use('/api/analytics', analyticsRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/api-keys', apiKeysRoutes);
+  app.use('/api/contact', contactRoutes);
 
   // 10. Global Error Handler
   app.use(errorHandler);

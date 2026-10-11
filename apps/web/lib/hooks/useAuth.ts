@@ -7,6 +7,19 @@ import {
   signInWithGooglePopup,
 } from '../firebase';
 
+function normalizeUser(data: any): UserProfile {
+  if (!data) return data;
+  return {
+    ...data,
+    fullName: data.fullName || data.name || 'User',
+    name: data.name || data.fullName || 'User',
+    profileImageUrl: data.profileImageUrl || data.avatar_url,
+    avatar_url: data.avatar_url || data.profileImageUrl,
+    walletBalancePaise: data.walletBalancePaise ?? data.wallet_balance_paise ?? 0,
+    wallet_balance_paise: data.wallet_balance_paise ?? data.walletBalancePaise ?? 0,
+  };
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
   const { user, setUser, setToken, logout: storeLogout, isAuthenticated } = useAuthStore();
@@ -15,7 +28,7 @@ export function useAuth() {
     queryKey: ['auth', 'profile'],
     queryFn: async (): Promise<UserProfile> => {
       const res = await apiClient.get('/users/me');
-      const data = res.data.data;
+      const data = normalizeUser(res.data.data);
       setUser(data);
       return data;
     },
@@ -26,7 +39,8 @@ export function useAuth() {
         localStorage.getItem('sharepostsync_access_token') ||
         localStorage.getItem('pushpost_access_token')
       ),
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const loginMutation = useMutation({
@@ -39,7 +53,7 @@ export function useAuth() {
       if (typeof window !== 'undefined') {
         localStorage.setItem('postspritz_refresh_token', data.refreshToken || '');
       }
-      setUser(data.user);
+      setUser(normalizeUser(data.user));
       queryClient.invalidateQueries({ queryKey: ['auth'] });
 
       // Automatically register FCM token for push notifications on login
@@ -59,7 +73,7 @@ export function useAuth() {
       if (typeof window !== 'undefined') {
         localStorage.setItem('postspritz_refresh_token', data.refreshToken || '');
       }
-      setUser(data.user);
+      setUser(normalizeUser(data.user));
       queryClient.invalidateQueries({ queryKey: ['auth'] });
 
       // Automatically register FCM token for push notifications on register
@@ -75,7 +89,7 @@ export function useAuth() {
       return res.data.data;
     },
     onSuccess: (data) => {
-      setUser(data);
+      setUser(normalizeUser(data));
       queryClient.invalidateQueries({ queryKey: ['auth', 'profile'] });
     },
   });
@@ -92,7 +106,7 @@ export function useAuth() {
       if (typeof window !== 'undefined') {
         localStorage.setItem('postspritz_refresh_token', data.refreshToken || '');
       }
-      setUser(data.user);
+      setUser(normalizeUser(data.user));
       queryClient.invalidateQueries({ queryKey: ['auth'] });
 
       setTimeout(() => {
