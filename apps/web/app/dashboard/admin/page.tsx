@@ -900,13 +900,13 @@ export default function AdminGovernancePage() {
             </div>
           </div>
 
-          <DataTable
+          <DataTable<any>
             data={auditData?.data || []}
             columns={[
               {
                 key: 'created_at',
                 header: 'Timestamp',
-                render: (l) => (
+                render: (l: any) => (
                   <span className="text-indigo-400 font-mono text-xs">
                     [{new Date(l.created_at).toLocaleString()}]
                   </span>
@@ -915,7 +915,7 @@ export default function AdminGovernancePage() {
               {
                 key: 'action',
                 header: 'Action & Event',
-                render: (l) => (
+                render: (l: any) => (
                   <div>
                     <span className="text-foreground font-semibold text-xs">{l.action}</span>
                     {l.user_email && <p className="text-[11px] text-muted-foreground">Actor: {l.user_email}</p>}
@@ -925,7 +925,7 @@ export default function AdminGovernancePage() {
               {
                 key: 'resource_type',
                 header: 'Resource',
-                render: (l) => (
+                render: (l: any) => (
                   <Badge variant="outline" className="text-[9px] uppercase">
                     {l.resource_type || 'SYSTEM'}
                   </Badge>
@@ -934,14 +934,14 @@ export default function AdminGovernancePage() {
               {
                 key: 'ip_address',
                 header: 'IP Address',
-                render: (l) => (
+                render: (l: any) => (
                   <span className="text-muted-foreground font-mono text-[11px]">{l.ip_address || '—'}</span>
                 ),
               },
             ]}
             loading={auditLoading}
             emptyMessage="No audit logs recorded."
-            rowKey={(l) => l.id}
+            rowKey={(l: any) => l.id || String(Math.random())}
           />
         </TabsContent>
 

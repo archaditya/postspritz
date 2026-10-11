@@ -201,7 +201,7 @@ export class AuthController {
   changePassword = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await authService.changePassword(
-        req.user!.userId,
+        req.user!.id,
         req.body.currentPassword,
         req.body.newPassword
       );
