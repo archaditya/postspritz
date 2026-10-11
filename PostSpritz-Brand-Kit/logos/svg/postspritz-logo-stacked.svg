@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="520" viewBox="0 0 600 520" role="img" aria-label="PostSpritz stacked logo">
+<rect width="600" height="520" rx="24" fill="#FAF9F6"/>
+<g transform="translate(236 34) scale(1.05)">
+<path d="M20 54 103 21c5.7-2.3 11.3 3.3 8.9 9L72 106c-2.1 5-9.4 4.8-11.1-.4L49.4 72.1 15 60c-5.2-1.8-5.1-9.1 5-6Z" fill="#FF5A1F"/>
+<path d="M49.4 72.1 100 24 61 83.4Z" fill="#E84712" opacity=".72"/>
+<path d="M8 77H31M2 91H22" stroke="#FF5A1F" stroke-width="8" stroke-linecap="round"/>
+</g>
+<text x="300" y="245" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="66" font-weight="750" letter-spacing="-2" fill="#17191C">Post<tspan fill="#FF5A1F">Spritz</tspan></text>
+<text x="300" y="294" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="23" letter-spacing="1.2" fill="#73777D">Create once. Spritz everywhere.</text>
+</svg>

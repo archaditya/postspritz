@@ -1,0 +1,22 @@
+{
+  "name": "postspritz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Autonomous AI social media scheduling & syndication platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run --workspace=apps/api dev",
+    "dev:web": "npm run --workspace=apps/web dev",
+    "build:types": "npm run --workspace=packages/shared-types build",
+    "db:migrate": "npm run --workspace=apps/api migrate",
+    "db:seed": "npm run --workspace=apps/api seed",
+    "docker:up": "docker-compose -f docker-compose.local.yml up -d",
+    "docker:down": "docker-compose -f docker-compose.local.yml down"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
