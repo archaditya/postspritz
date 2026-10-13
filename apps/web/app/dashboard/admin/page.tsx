@@ -29,6 +29,7 @@ import {
   Copy,
   Check,
   Lock,
+  Package,
 } from 'lucide-react';
 import { apiClient } from '../../../lib/api-client';
 import { Button } from '../../../components/ui/button';
@@ -55,6 +56,13 @@ export default function AdminGovernancePage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [inspectorSubTab, setInspectorSubTab] = useState<'platforms' | 'posts' | 'wallet' | 'devices' | 'config'>('platforms');
+
+  // Assign Package Modal State
+  const [assignPlanModalOpen, setAssignPlanModalOpen] = useState(false);
+  const [assignPlanUser, setAssignPlanUser] = useState<any | null>(null);
+  const [selectedPlanName, setSelectedPlanName] = useState<string>('starter');
+  const [selectedBillingCycle, setSelectedBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [assignSuccessMsg, setAssignSuccessMsg] = useState<string | null>(null);
 
   // Broadcast Notification Form State
   const [broadcastForm, setBroadcastForm] = useState({
@@ -138,6 +146,40 @@ export default function AdminGovernancePage() {
     },
   });
 
+  // 6. Fetch Available Package Plans & Quotas
+  const {
+    data: plansData,
+    isLoading: plansLoading,
+    refetch: refetchPlans,
+  } = useQuery({
+    queryKey: ['admin-plans'],
+    queryFn: async () => {
+      const res = await apiClient.get('/admin/plans');
+      return res.data.data;
+    },
+  });
+
+  // Assign Package Mutation
+  const assignPlanMutation = useMutation({
+    mutationFn: async ({ userId, plan, billingCycle }: { userId: string; plan: string; billingCycle: 'monthly' | 'yearly' }) => {
+      const res = await apiClient.post(`/admin/users/${userId}/assign-package`, { plan, billingCycle });
+      return res.data;
+    },
+    onSuccess: (res) => {
+      setAssignSuccessMsg(`Package '${res.data?.plan?.display_name}' successfully assigned to user!`);
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-plans'] });
+      if (selectedUserId) {
+        queryClient.invalidateQueries({ queryKey: ['admin-user-detail', selectedUserId] });
+      }
+      setTimeout(() => {
+        setAssignPlanModalOpen(false);
+        setAssignSuccessMsg(null);
+      }, 1200);
+    },
+  });
+
   // User Status Toggle Mutation
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -150,6 +192,20 @@ export default function AdminGovernancePage() {
       if (selectedUserId) {
         queryClient.invalidateQueries({ queryKey: ['admin-user-detail', selectedUserId] });
       }
+    },
+  });
+
+  // Manual Expiry Scan Mutation
+  const triggerExpiryMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post('/admin/system/trigger-expiry');
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-queues'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-plans'] });
     },
   });
 
@@ -320,6 +376,19 @@ export default function AdminGovernancePage() {
             variant="outline"
             size="sm"
             onClick={() => {
+              setAssignPlanUser(u);
+              setSelectedPlanName(u.plan_name || 'free');
+              setAssignPlanModalOpen(true);
+            }}
+            className="text-[11px] h-7 px-2.5 gap-1 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500"
+          >
+            <Package className="w-3 h-3" /> Assign Package
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
               setSelectedUserId(u.id);
               setInspectorSubTab('platforms');
             }}
@@ -407,8 +476,8 @@ export default function AdminGovernancePage() {
 
         <StatCard
           title="Queue Workers"
-          value="4 Workers"
-          subtitle="Publisher · Refresh · Notif · Cleanup"
+          value="5 Workers"
+          subtitle="Publisher · Refresh · Notif · Cleanup · SubExpiry"
           icon={Server}
         />
 
@@ -446,6 +515,12 @@ export default function AdminGovernancePage() {
             <Clock className="w-3.5 h-3.5" /> Security Audit Trail
             <Badge variant="outline" className="text-[10px] ml-1 py-0 px-1.5 border-border">
               {auditData?.total ?? 0}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="plans" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
+            <Package className="w-3.5 h-3.5" /> Packages & Quotas
+            <Badge variant="outline" className="text-[10px] ml-1 py-0 px-1.5 border-border">
+              {plansData?.length ?? 3}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="overview" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
@@ -886,6 +961,57 @@ export default function AdminGovernancePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Subscription Expiry Worker Queue */}
+            <Card className="border-border/80 md:col-span-2">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Package className="w-4 h-4 text-indigo-400" /> subscription-queue (Package Expiry Engine)
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="success" className="text-[10px]">HOURLY CRON</Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={triggerExpiryMutation.isPending}
+                      onClick={() => triggerExpiryMutation.mutate()}
+                      className="h-6 text-[10px] px-2.5 border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 gap-1"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${triggerExpiryMutation.isPending ? 'animate-spin' : ''}`} />
+                      {triggerExpiryMutation.isPending ? 'Scanning Subscriptions...' : 'Run Expiry Scan Now'}
+                    </Button>
+                  </div>
+                </div>
+                <CardDescription className="text-xs">
+                  Periodically monitors active package subscriptions. If a package passes its end date, the worker transitions the status to 'expired', issues user alerts, and immediately enforces Free Starter limits.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                  <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
+                    <span className="text-muted-foreground block text-[10px] uppercase">Active</span>
+                    <span className="text-lg font-bold text-indigo-400">{queuesData?.subscriptions?.active ?? 0}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
+                    <span className="text-muted-foreground block text-[10px] uppercase">Waiting</span>
+                    <span className="text-lg font-bold text-amber-400">{queuesData?.subscriptions?.waiting ?? 0}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
+                    <span className="text-muted-foreground block text-[10px] uppercase">Completed</span>
+                    <span className="text-lg font-bold text-emerald-400">{queuesData?.subscriptions?.completed ?? 0}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
+                    <span className="text-muted-foreground block text-[10px] uppercase">Failed</span>
+                    <span className="text-lg font-bold text-destructive">{queuesData?.subscriptions?.failed ?? 0}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
+                  <span>Recurring automated schedule: <strong>Hourly (0 * * * *)</strong></span>
+                  <span>Delayed / Scheduled: <strong className="text-foreground">{queuesData?.subscriptions?.delayed ?? 0}</strong></span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -1025,6 +1151,157 @@ export default function AdminGovernancePage() {
             </Card>
           </div>
         </TabsContent>
+
+        {/* 6. PACKAGES & QUOTA GUARDRAILS TAB */}
+        <TabsContent value="plans" className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Platform Packages & Quota Guardrails</h2>
+              <p className="text-xs text-muted-foreground">
+                Configured subscription packages, monthly posting quotas, and account limits. Admins can assign packages directly to any user.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveTab('users')}
+              className="text-xs h-8 gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <Users className="w-3.5 h-3.5" /> Go to User Directory to Assign
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(plansData && plansData.length > 0 ? plansData : [
+              {
+                id: 'p-free',
+                name: 'free',
+                display_name: 'Free Starter',
+                description: 'Default tier for all new signups. Limited posting with guardrails.',
+                price_monthly_paise: 0,
+                max_social_accounts: 2,
+                max_posts_per_month: 30,
+                max_ai_generations: 20,
+                max_ai_images: 0,
+                active_subscribers: 0,
+              },
+              {
+                id: 'p-starter',
+                name: 'starter',
+                display_name: 'Creator Pro',
+                description: 'For active creators looking to boost engagement with multi-channels & AI.',
+                price_monthly_paise: 99900,
+                max_social_accounts: 10,
+                max_posts_per_month: 200,
+                max_ai_generations: 150,
+                max_ai_images: 20,
+                active_subscribers: 0,
+              },
+              {
+                id: 'p-pro',
+                name: 'pro',
+                display_name: 'Agency & Teams',
+                description: 'Full autonomy with high volume scheduling and agency team posting.',
+                price_monthly_paise: 299900,
+                max_social_accounts: 30,
+                max_posts_per_month: 1000,
+                max_ai_generations: 1000,
+                max_ai_images: 100,
+                active_subscribers: 0,
+              },
+            ]).map((plan: any) => (
+              <Card
+                key={plan.id}
+                className={`border transition-all duration-200 relative overflow-hidden flex flex-col justify-between ${
+                  plan.name === 'starter'
+                    ? 'border-indigo-500/50 shadow-lg shadow-indigo-500/10 bg-indigo-500/[0.02]'
+                    : plan.name === 'pro'
+                    ? 'border-purple-500/40 bg-purple-500/[0.02]'
+                    : 'border-border/80'
+                }`}
+              >
+                <div>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] uppercase font-bold py-0.5 ${
+                          plan.name === 'starter'
+                            ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10'
+                            : plan.name === 'pro'
+                            ? 'border-purple-500/50 text-purple-400 bg-purple-500/10'
+                            : 'border-border text-muted-foreground'
+                        }`}
+                      >
+                        {plan.name === 'free' ? 'Default Tier' : plan.name === 'starter' ? 'Creator Tier' : 'Agency Tier'}
+                      </Badge>
+                      <span className="text-[11px] font-mono text-muted-foreground flex items-center gap-1">
+                        <Users className="w-3 h-3 text-primary" /> {plan.active_subscribers ?? 0} active
+                      </span>
+                    </div>
+
+                    <CardTitle className="text-base font-bold text-foreground mt-2">{plan.display_name}</CardTitle>
+                    <CardDescription className="text-xs line-clamp-2 mt-1">{plan.description}</CardDescription>
+                  </CardHeader>
+
+                  <CardContent className="space-y-4 pt-0">
+                    <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold font-mono text-foreground">
+                          {formatCurrency((plan.price_monthly_paise || 0) / 100)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">/ month</span>
+                      </div>
+                      {plan.price_yearly_paise > 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          or {formatCurrency(plan.price_yearly_paise / 100)} / year
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Enforced Guardrail Quotas
+                      </p>
+                      <div className="flex items-center justify-between py-1 border-b border-border/30">
+                        <span className="text-muted-foreground">Social Channels</span>
+                        <strong className="text-foreground font-mono">{plan.max_social_accounts} accounts</strong>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-border/30">
+                        <span className="text-muted-foreground">Posts Quota</span>
+                        <strong className="text-foreground font-mono">{plan.max_posts_per_month} posts / mo</strong>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-border/30">
+                        <span className="text-muted-foreground">AI Generations</span>
+                        <strong className="text-foreground font-mono">{plan.max_ai_generations ?? 20} / mo</strong>
+                      </div>
+                      <div className="flex items-center justify-between py-1 border-b border-border/30">
+                        <span className="text-muted-foreground">AI Image Generation</span>
+                        <strong className="text-foreground font-mono">
+                          {plan.max_ai_images && plan.max_ai_images > 0 ? `${plan.max_ai_images} images / mo` : 'Not included (Coming Soon)'}
+                        </strong>
+                      </div>
+                    </div>
+                  </CardContent>
+                </div>
+
+                <div className="p-4 pt-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedPlanName(plan.name);
+                      setActiveTab('users');
+                    }}
+                    className="w-full text-xs h-8 border-border hover:border-primary hover:text-primary gap-1.5"
+                  >
+                    <Package className="w-3.5 h-3.5" /> Assign Users to {plan.display_name}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* USER SETUP INSPECTOR MODAL */}
@@ -1062,9 +1339,22 @@ export default function AdminGovernancePage() {
 
           {/* Quick Metrics Header Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3">
-            <div className="p-2.5 rounded-xl bg-muted/20 border border-border/40 text-center">
-              <span className="text-[10px] text-muted-foreground block uppercase font-semibold">Active Plan</span>
-              <span className="text-xs font-bold text-primary capitalize">{userDetail?.user?.plan_name || 'Free Starter'}</span>
+            <div className="p-2.5 rounded-xl bg-muted/20 border border-border/40 text-center flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] text-muted-foreground block uppercase font-semibold">Active Plan</span>
+                <span className="text-xs font-bold text-primary capitalize">{userDetail?.user?.plan_name || 'Free Starter'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssignPlanUser(userDetail.user);
+                  setSelectedPlanName(userDetail?.user?.plan_name || 'free');
+                  setAssignPlanModalOpen(true);
+                }}
+                className="mt-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
+              >
+                Assign Package
+              </button>
             </div>
             <div className="p-2.5 rounded-xl bg-muted/20 border border-border/40 text-center">
               <span className="text-[10px] text-muted-foreground block uppercase font-semibold">Fuel Wallet</span>
@@ -1373,6 +1663,176 @@ export default function AdminGovernancePage() {
           </div>
           <Button variant="ghost" size="sm" onClick={() => setSelectedUserId(null)} className="text-xs">
             Close Inspector
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* ASSIGN PACKAGE & TIER MODAL */}
+      <Dialog open={assignPlanModalOpen} onOpenChange={(open) => !open && setAssignPlanModalOpen(false)} className="max-w-xl p-6">
+        <DialogHeader className="text-left pb-3 border-b border-border/60">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <Package className="w-5 h-5" />
+            </span>
+            <div>
+              <DialogTitle className="text-base font-bold text-foreground">
+                Assign Package & Quota Guardrails
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Target User: <strong className="text-foreground">{assignPlanUser?.name || 'User'}</strong> ({assignPlanUser?.email})
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="py-4 space-y-4">
+          <div className="flex items-center justify-between text-xs p-3 rounded-xl bg-muted/20 border border-border/40">
+            <span className="text-muted-foreground">Current Active Plan:</span>
+            <Badge variant="outline" className="capitalize text-xs font-bold text-primary border-primary/30">
+              {assignPlanUser?.plan_name || 'Free Starter'}
+            </Badge>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-2">
+              Select Package Tier
+            </label>
+            <div className="space-y-2.5">
+              {[
+                {
+                  id: 'free',
+                  name: 'free',
+                  title: 'Free Starter',
+                  price: '₹0 / mo',
+                  channels: '2 Channels',
+                  posts: '30 Posts / mo',
+                  desc: 'Default tier with guardrails for exploration',
+                  badge: 'Free Tier',
+                },
+                {
+                  id: 'starter',
+                  name: 'starter',
+                  title: 'Creator Pro',
+                  price: '₹999 / mo',
+                  channels: '10 Channels',
+                  posts: '200 Posts / mo',
+                  desc: 'Multi-account posting, 150 AI captions, 20 AI images',
+                  badge: 'Most Popular',
+                },
+                {
+                  id: 'pro',
+                  name: 'pro',
+                  title: 'Agency & Teams',
+                  price: '₹2,999 / mo',
+                  channels: '30 Channels',
+                  posts: '1,000 Posts / mo',
+                  desc: 'High-volume scheduling, 1000 AI gens, 100 AI images',
+                  badge: 'Unlimited Power',
+                },
+              ].map((tier) => (
+                <div
+                  key={tier.id}
+                  onClick={() => setSelectedPlanName(tier.name)}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-3 text-xs ${
+                    selectedPlanName === tier.name
+                      ? 'border-indigo-500 bg-indigo-500/10 shadow-sm shadow-indigo-500/20 ring-1 ring-indigo-500/30'
+                      : 'border-border/60 bg-muted/10 hover:border-border hover:bg-muted/30'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-foreground text-xs">{tier.title}</span>
+                      <Badge variant="outline" className="text-[9px] py-0 px-1.5 border-border">
+                        {tier.badge}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{tier.desc}</p>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono pt-1">
+                      <span className="text-foreground font-semibold">{tier.channels}</span>
+                      <span>•</span>
+                      <span className="text-foreground font-semibold">{tier.posts}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-mono font-bold text-foreground block text-xs">{tier.price}</span>
+                    <input
+                      type="radio"
+                      name="tier_select"
+                      checked={selectedPlanName === tier.name}
+                      onChange={() => setSelectedPlanName(tier.name)}
+                      className="mt-1.5 text-indigo-500 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">
+              Billing Cycle Duration
+            </label>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedBillingCycle('monthly')}
+                className={`py-2 px-3 rounded-xl border text-center font-semibold transition-colors ${
+                  selectedBillingCycle === 'monthly'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
+                    : 'border-border text-muted-foreground hover:bg-muted/30'
+                }`}
+              >
+                Monthly (30 Days)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBillingCycle('yearly')}
+                className={`py-2 px-3 rounded-xl border text-center font-semibold transition-colors ${
+                  selectedBillingCycle === 'yearly'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
+                    : 'border-border text-muted-foreground hover:bg-muted/30'
+                }`}
+              >
+                Yearly (365 Days)
+              </button>
+            </div>
+          </div>
+
+          {assignSuccessMsg && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{assignSuccessMsg}</span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="pt-3 border-t border-border/60 flex items-center justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setAssignPlanModalOpen(false)}
+            className="text-xs"
+          >
+            Cancel
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            disabled={assignPlanMutation.isPending || !assignPlanUser}
+            onClick={() => {
+              if (assignPlanUser) {
+                assignPlanMutation.mutate({
+                  userId: assignPlanUser.id,
+                  plan: selectedPlanName,
+                  billingCycle: selectedBillingCycle,
+                });
+              }
+            }}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs gap-1.5 shadow-md shadow-indigo-600/20"
+          >
+            {assignPlanMutation.isPending ? 'Assigning Package...' : 'Confirm & Assign Package'}
           </Button>
         </DialogFooter>
       </Dialog>

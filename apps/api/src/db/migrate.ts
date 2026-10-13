@@ -17,7 +17,13 @@ async function migrate() {
       );
     `);
 
-    const migrationsDir = path.join(__dirname, 'migrations');
+    let migrationsDir = path.join(__dirname, 'migrations');
+    if (!fs.existsSync(migrationsDir)) {
+      const srcDir = path.join(__dirname, '../../src/db/migrations');
+      if (fs.existsSync(srcDir)) {
+        migrationsDir = srcDir;
+      }
+    }
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
     for (const file of files) {

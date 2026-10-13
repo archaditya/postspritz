@@ -53,3 +53,11 @@ export const cleanupQueue = new Queue('cleanup-queue', {
     backoff: { type: 'exponential', delay: 60000 }
   }
 });
+
+export const subscriptionQueue = new Queue('subscription-queue', {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10000 }
+  }
+});

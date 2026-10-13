@@ -16,6 +16,9 @@ router.get('/users/:id', controller.getUserDetail);
 router.patch('/users/:id/status', controller.updateStatus);
 router.get('/system/queues', controller.getQueueStats);
 router.get('/audit-logs', controller.getAuditLogs);
+router.get('/plans', controller.getPlans);
+router.post('/users/:id/assign-package', controller.assignPlan);
+router.post('/system/trigger-expiry', controller.triggerSubscriptionExpiry);
 router.post('/notifications/broadcast', controller.broadcastNotification);
 
 export const adminRoutes = router;

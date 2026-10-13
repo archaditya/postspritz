@@ -12,6 +12,7 @@ import { encryptToken, decryptToken } from '../../utils/crypto.utils';
 import { redis } from '../../config/redis';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { logger } from '../../config/logger';
+import { query } from '../../db/pool';
 
 export class SocialAccountsService {
   private repo: SocialAccountsRepository;
@@ -58,6 +59,33 @@ export class SocialAccountsService {
     const provider = this.getProvider(platform);
     const tokenSet = await provider.exchangeCode(code, codeVerifier);
     const profile = await provider.getUserProfile(tokenSet.accessToken);
+
+    // Free Tier Quota Guardrail: Enforce max connected social channels (default 2 on Starter)
+    const existingAccounts = await this.repo.findByUserId(userId);
+    const isAlreadyConnected = existingAccounts.some(
+      a => a.platform === platform && a.platform_user_id === profile.platformUserId
+    );
+
+    if (!isAlreadyConnected) {
+      const userRes = await query(
+        `SELECT u.role, p.max_social_accounts
+         FROM users u
+         LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active'
+         LEFT JOIN plans p ON p.id = s.plan_id
+         WHERE u.id = $1`,
+        [userId]
+      );
+      const userRow = userRes.rows[0];
+      const isExempt = userRow?.role === 'superadmin' || userRow?.role === 'admin';
+      const maxAccountsAllowed = userRow?.max_social_accounts ?? 2;
+
+      if (!isExempt && existingAccounts.length >= maxAccountsAllowed) {
+        throw new AppError(
+          `Free Starter limit reached: You can connect up to ${maxAccountsAllowed} social channels. Connecting unlimited channels will be available in Pro (coming soon)!`,
+          403
+        );
+      }
+    }
 
     const accessTokenEnc = encryptToken(tokenSet.accessToken);
     const refreshTokenEnc = tokenSet.refreshToken ? encryptToken(tokenSet.refreshToken) : null;

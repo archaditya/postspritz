@@ -9,7 +9,9 @@ export class UsersRepository {
               u.preferences, u.notification_settings, u.ai_config, u.usage, u.created_at,
               s.id as subscription_id, s.status as subscription_status, s.billing_cycle,
               s.current_period_end, p.id as plan_id, p.name as plan_name, p.name as plan_slug,
-              p.display_name as plan_display_name, p.features as plan_features
+              p.display_name as plan_display_name, p.features as plan_features,
+              p.max_posts_per_month, p.max_social_accounts, p.max_scheduled_posts,
+              p.max_ai_generations, p.max_ai_images
        FROM users u
        LEFT JOIN subscriptions s ON s.user_id = u.id AND s.status = 'active'
        LEFT JOIN plans p ON p.id = s.plan_id

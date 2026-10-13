@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postspritz_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postspritz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postspritz_secure_pwd_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-postspritz}
+    volumes:
+      - pg_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postspritz} -d ${POSTGRES_DB:-postspritz}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: postspritz_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: prod
+    container_name: postspritz_api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postspritz}:${POSTGRES_PASSWORD:-postspritz_secure_pwd_2026}@postgres:5432/${POSTGRES_DB:-postspritz}
+      - REDIS_URL=redis://redis:6379
+      - API_BASE_URL=https://PostSpiritz.archadi.dev
+      - WEB_BASE_URL=https://PostSpiritz.archadi.dev
+    expose:
+      - "4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: prod
+    container_name: postspritz_web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - INTERNAL_API_URL=http://api:4000
+      - NEXT_PUBLIC_APP_URL=https://PostSpiritz.archadi.dev
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pg_data_prod:
+  redis_data_prod:

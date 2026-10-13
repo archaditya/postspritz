@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { useAuth } from '../../lib/hooks/useAuth';
+import { ComingSoonModal } from '../../components/ComingSoonModal';
 
 interface PricingTier {
   name: string;
@@ -95,6 +96,7 @@ const faqs = [
 
 export default function PricingPage() {
   const { user } = useAuth();
+  const [comingSoonModalOpen, setComingSoonModalOpen] = useState(false);
 
   return (
     <PublicChrome>
@@ -154,21 +156,39 @@ export default function PricingPage() {
               </div>
 
               <div>
-                <Button
-                  asChild
-                  variant={tier.popular ? 'glow' : 'outline'}
-                  size="lg"
-                  className="w-full justify-center"
-                >
-                  <Link href={user ? '/dashboard' : tier.ctaLink}>
-                    {user ? 'View in Dashboard' : tier.cta}
-                  </Link>
-                </Button>
+                {tier.name === 'Starter' ? (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="lg"
+                    className="w-full justify-center"
+                  >
+                    <Link href={user ? '/dashboard' : tier.ctaLink}>
+                      {user ? 'Active on Starter' : tier.cta}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    variant={tier.popular ? 'glow' : 'outline'}
+                    size="lg"
+                    onClick={() => setComingSoonModalOpen(true)}
+                    className="w-full justify-center"
+                  >
+                    {tier.cta} (Coming Soon)
+                  </Button>
+                )}
               </div>
             </div>
           ))}
         </div>
       </section>
+
+      <ComingSoonModal
+        open={comingSoonModalOpen}
+        onOpenChange={setComingSoonModalOpen}
+        featureTitle="Pro Plans & Dedicated Queues Launching Soon"
+        featureDescription="PostSpritz is currently in early creator access on our generous Free Starter tier. Paid plans with unlimited accounts and priority BullMQ queues will open shortly!"
+      />
 
       {/* FAQ Section */}
       <section className="border-t border-border/60 bg-muted/20 py-16 px-4 sm:px-6">

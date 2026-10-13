@@ -22,6 +22,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../../components/ui
 import { Dialog, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { formatCurrency } from '../../../lib/utils';
+import { ComingSoonModal } from '../../../components/ComingSoonModal';
 
 export default function BillingPage() {
   const { user } = useAuth();
@@ -37,6 +38,7 @@ export default function BillingPage() {
     isToppingUp,
   } = useBilling();
 
+  const [comingSoonModalOpen, setComingSoonModalOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [topupAmount, setTopupAmount] = useState<number | string>(500);
   const [topupTouched, setTopupTouched] = useState(false);
@@ -59,17 +61,8 @@ export default function BillingPage() {
         : null
       : null;
 
-  const handleSubscribe = async (planId: string) => {
-    try {
-      const res = await createSubscription({ planId, provider: selectedProvider });
-      if (res?.paymentLink) {
-        window.location.href = res.paymentLink;
-      } else {
-        setStatusMsg({ type: 'success', text: `Subscription checkout created with ${selectedProvider}!` });
-      }
-    } catch (err: any) {
-      setStatusMsg({ type: 'error', text: err?.response?.data?.error?.message || err?.response?.data?.message || 'Failed to initiate subscription' });
-    }
+  const handleSubscribe = async (_planId: string) => {
+    setComingSoonModalOpen(true);
   };
 
   const handleTopup = async () => {
@@ -149,7 +142,7 @@ export default function BillingPage() {
           </p>
         </div>
 
-        <Button variant="glow" onClick={() => setWalletModalOpen(true)} className="gap-2">
+        <Button variant="glow" onClick={() => setComingSoonModalOpen(true)} className="gap-2">
           <Plus className="w-4 h-4" /> Top Up Wallet
         </Button>
       </div>
@@ -413,6 +406,13 @@ export default function BillingPage() {
           </Button>
         </div>
       </Dialog>
+
+      <ComingSoonModal
+        open={comingSoonModalOpen}
+        onOpenChange={setComingSoonModalOpen}
+        featureTitle="Pro Plans & Fuel Wallet Coming Soon"
+        featureDescription="As an early platform creator, you are active on our Free Starter Tier. Paid tier upgrades and fuel wallet top-ups are launching soon!"
+      />
     </div>
   );
 }

@@ -2,7 +2,8 @@ import { publisherWorker } from './publisher.worker';
 import { tokenRefreshWorker } from './token-refresh.worker';
 import { notificationWorker } from './notification.worker';
 import { cleanupWorker } from './cleanup.worker';
-import { cleanupQueue, tokenRefreshQueue } from '../config/bullmq';
+import { subscriptionWorker } from './subscription-expiry.worker';
+import { cleanupQueue, tokenRefreshQueue, subscriptionQueue } from '../config/bullmq';
 import { logger } from '../config/logger';
 
 export function startWorkers() {
@@ -32,6 +33,14 @@ export function startWorkers() {
     logger.error({ jobId: job?.id, err: err.message }, 'Retention cleanup job failed');
   });
 
+  subscriptionWorker.on('completed', (job, result) => {
+    logger.info({ jobId: job.id, result }, 'Subscription expiry scan job completed successfully');
+  });
+
+  subscriptionWorker.on('failed', (job, err) => {
+    logger.error({ jobId: job?.id, err: err.message }, 'Subscription expiry scan job failed');
+  });
+
   // Schedule daily data retention backoff purge job (midnight UTC)
   cleanupQueue.add(
     'daily-retention-purge',
@@ -45,7 +54,6 @@ export function startWorkers() {
   });
 
   // Schedule token refresh every 6 hours — scans for tokens expiring within 48hrs
-  // FB/IG long-lived tokens are ~60 days, Threads ~60 days, LinkedIn ~60 days
   tokenRefreshQueue.add(
     'refresh-expiring-tokens',
     {},
@@ -57,7 +65,19 @@ export function startWorkers() {
     logger.warn({ err }, 'Could not register cron_token_refresh');
   });
 
-  logger.info('✅ All 4 background workers active (Publisher, TokenRefresh, Notification, Cleanup/Retention)');
+  // Schedule subscription package expiry every hour — transitions expired packages to Free Starter
+  subscriptionQueue.add(
+    'expire-subscriptions',
+    {},
+    {
+      repeat: { pattern: '0 * * * *' }, // Every hour
+      jobId: 'cron_subscription_expiry',
+    }
+  ).catch((err) => {
+    logger.warn({ err }, 'Could not register cron_subscription_expiry');
+  });
+
+  logger.info('✅ All 5 background workers active (Publisher, TokenRefresh, Notification, Cleanup/Retention, SubscriptionExpiry)');
 }
 
 export async function stopWorkers() {
@@ -67,6 +87,7 @@ export async function stopWorkers() {
     tokenRefreshWorker.close(),
     notificationWorker.close(),
     cleanupWorker.close(),
+    subscriptionWorker.close(),
   ]);
   logger.info('Background workers closed.');
 }

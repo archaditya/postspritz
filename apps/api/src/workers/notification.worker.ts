@@ -94,6 +94,37 @@ export const notificationWorker = new Worker(
         title,
         `<p>${body}</p><p><a href="/dashboard/accounts">Reconnect in Dashboard</a></p>`
       );
+    } else if (name === 'subscription-expired') {
+      const { userId, planDisplayName } = data;
+      const userRes = await query('SELECT email, name FROM users WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (!user) return;
+
+      const title = 'Subscription Package Expired ⚠️';
+      const body = `Your ${planDisplayName || 'subscription'} package period has completed. Your account is now operating on Free Starter limits.`;
+
+      const notifRes = await query(
+        `INSERT INTO notifications (
+          user_id, type, title, body, action_url, action_label, resource_type
+        ) VALUES ($1, $2, $3, $4, '/dashboard/billing', 'Renew Package', 'subscription')
+        RETURNING *`,
+        [userId, NotificationType.BILLING_REMINDER, title, body]
+      );
+
+      await redis.publish(`notifications:${userId}`, JSON.stringify(notifRes.rows[0]));
+
+      await firebaseService.sendPushNotification(userId, {
+        title,
+        body,
+        clickUrl: '/dashboard/billing',
+        data: { type: 'subscription_expired' }
+      });
+
+      await emailService.sendEmail(
+        user.email,
+        title,
+        `<p>Hello ${user.name || 'there'},</p><p>${body}</p><p><a href="/dashboard/billing">Manage Subscription</a></p>`
+      );
     }
   },
   {

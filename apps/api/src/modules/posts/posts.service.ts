@@ -5,6 +5,7 @@ import { PostStatus, SocialPlatform } from '@pushpost/shared-types';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { logger } from '../../config/logger';
 import { publisherQueue } from '../../config/bullmq';
+import { query } from '../../db/pool';
 
 export class PostsService {
   private postsRepo: PostsRepository;
@@ -66,9 +67,20 @@ export class PostsService {
       return acc;
     });
 
-    // 2. Validate Paid Platforms (X/Twitter pass-through consent)
-    const hasUrl = this.detectUrls(input.content);
+    // 2. Validate Free Tier Quota Guardrail & Paid Platforms
     const userProfile = await this.usersRepo.getProfile(userId);
+    const isExempt = userProfile?.role === 'superadmin' || userProfile?.role === 'admin';
+    const maxPostsAllowed = userProfile?.max_posts_per_month ?? 30;
+    const currentPostsCount = Number(userProfile?.usage?.posts_this_month ?? 0);
+
+    if (!isExempt && currentPostsCount >= maxPostsAllowed) {
+      throw new AppError(
+        `Free Starter monthly limit reached (${maxPostsAllowed} posts). You have dispatched ${currentPostsCount} posts this month. Upgrades to Pro are coming soon!`,
+        403
+      );
+    }
+
+    const hasUrl = this.detectUrls(input.content);
     const paidConsent = userProfile?.preferences?.platform_settings?.paid_platforms_consent || {};
 
     const targetPayloads = targetAccounts.map(acc => {
@@ -117,7 +129,20 @@ export class PostsService {
       }))
     );
 
-    logger.info({ postId: post.id, userId, status: initialStatus }, 'Post created successfully');
+    // 5. Increment usage counter
+    await query(
+      `UPDATE users
+       SET usage = jsonb_set(
+         COALESCE(usage, '{"posts_this_month": 0, "ai_generations_this_month": 0}'::jsonb),
+         '{posts_this_month}',
+         to_jsonb(COALESCE((usage->>'posts_this_month')::int, 0) + 1)
+       ),
+       updated_at = NOW()
+       WHERE id = $1`,
+      [userId]
+    );
+
+    logger.info({ postId: post.id, userId, status: initialStatus, postCount: currentPostsCount + 1 }, 'Post created successfully');
 
     return {
       ...post,

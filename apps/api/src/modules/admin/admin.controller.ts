@@ -106,4 +106,49 @@ export class AdminController {
       next(err);
     }
   };
+
+  getPlans = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const plans = await this.service.getPlans();
+      ApiResponse.success(res, plans, 'Platform subscription plans and quota tiers retrieved');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  assignPlan = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const adminUserId = (req as any).user.id;
+      const targetUserId = req.params.id;
+      const { plan, billingCycle } = req.body;
+
+      if (!plan) {
+        return res.status(400).json({ success: false, message: 'Plan name or ID is required' });
+      }
+
+      const result = await this.service.assignUserPlan({
+        adminUserId,
+        targetUserId,
+        planNameOrId: plan,
+        billingCycle: billingCycle || 'monthly'
+      });
+
+      ApiResponse.success(res, result, 'Package plan assigned to user successfully');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  triggerSubscriptionExpiry = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.service.triggerSubscriptionExpiryCheck();
+      ApiResponse.success(
+        res,
+        result,
+        `Subscription expiry scan completed: ${result.expiredCount} expired packages transitioned to Free Starter`
+      );
+    } catch (err) {
+      next(err);
+    }
+  };
 }

@@ -1,8 +1,9 @@
 import { query } from '../../db/pool';
-import { publisherQueue, notificationQueue, tokenRefreshQueue, cleanupQueue } from '../../config/bullmq';
+import { publisherQueue, notificationQueue, tokenRefreshQueue, cleanupQueue, subscriptionQueue } from '../../config/bullmq';
 import { redis } from '../../config/redis';
 import { firebaseService } from '../../services/firebase.service';
 import { AppError } from '../../middlewares/errorHandler.middleware';
+import { processExpiredSubscriptions } from '../../workers/subscription-expiry.worker';
 
 export class AdminService {
   async listUsers(page = 1, limit = 20, search?: string) {
@@ -87,18 +88,20 @@ export class AdminService {
   }
 
   async getQueueStats() {
-    const [pubCounts, notifCounts, refreshCounts, cleanupCounts] = await Promise.all([
+    const [pubCounts, notifCounts, refreshCounts, cleanupCounts, subCounts] = await Promise.all([
       publisherQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting'),
       notificationQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting'),
       tokenRefreshQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting'),
-      cleanupQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting')
+      cleanupQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting'),
+      subscriptionQueue.getJobCounts('active', 'completed', 'failed', 'delayed', 'waiting')
     ]);
 
     return {
       publisher: pubCounts,
       notifications: notifCounts,
       tokenRefresh: refreshCounts,
-      cleanup: cleanupCounts
+      cleanup: cleanupCounts,
+      subscriptions: subCounts
     };
   }
 
@@ -266,5 +269,118 @@ export class AdminService {
       limit,
       totalPages: Math.ceil(total / limit)
     };
+  }
+
+  async getPlans() {
+    const res = await query(
+      `SELECT id, name, display_name, description, price_monthly_paise, price_yearly_paise,
+              currency, max_social_accounts, max_posts_per_month, max_scheduled_posts,
+              max_ai_generations, max_ai_images, max_media_storage_mb, features, is_active, sort_order,
+              COALESCE((SELECT COUNT(*) FROM subscriptions s WHERE s.plan_id = plans.id AND s.status = 'active'), 0)::int as active_subscribers
+       FROM plans
+       WHERE is_active = TRUE
+       ORDER BY sort_order ASC`
+    );
+    return res.rows;
+  }
+
+  async assignUserPlan(params: {
+    adminUserId: string;
+    targetUserId: string;
+    planNameOrId: string;
+    billingCycle?: 'monthly' | 'yearly';
+  }) {
+    const { adminUserId, targetUserId, planNameOrId, billingCycle = 'monthly' } = params;
+
+    // 1. Verify target user
+    const userRes = await query(`SELECT id, email, name, role FROM users WHERE id = $1 AND deleted_at IS NULL`, [targetUserId]);
+    const user = userRes.rows[0];
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    // 2. Verify target plan
+    const planRes = await query(
+      `SELECT * FROM plans WHERE (id::text = $1 OR name = $1) AND is_active = TRUE LIMIT 1`,
+      [planNameOrId]
+    );
+    const plan = planRes.rows[0];
+    if (!plan) {
+      throw new AppError(`Plan '${planNameOrId}' not found`, 404);
+    }
+
+    // 3. Cancel existing active subscriptions
+    await query(
+      `UPDATE subscriptions
+       SET status = 'cancelled', cancel_reason = 'Superseded by administrative package assignment', updated_at = NOW()
+       WHERE user_id = $1 AND status IN ('active', 'trialing') AND deleted_at IS NULL`,
+      [targetUserId]
+    );
+
+    // 4. Calculate period end
+    const periodDays = billingCycle === 'yearly' ? 365 : 30;
+    const periodEnd = new Date(Date.now() + periodDays * 24 * 60 * 60 * 1000);
+    const subId = `sub_admin_${Date.now().toString(36)}`;
+
+    // 5. Insert new active subscription
+    const subRes = await query(
+      `INSERT INTO subscriptions (
+         user_id, plan_id, payment_gateway, gateway_subscription_id,
+         status, billing_cycle, current_period_start, current_period_end
+       ) VALUES ($1, $2, 'cashfree', $3, 'active', $4, NOW(), $5)
+       RETURNING *`,
+      [targetUserId, plan.id, subId, billingCycle, periodEnd]
+    );
+
+    // 6. Reset usage counters for the user
+    await query(
+      `UPDATE users
+       SET usage = jsonb_set(
+             COALESCE(usage, '{"posts_this_month": 0, "ai_generations_this_month": 0, "ai_images_this_month": 0}'::jsonb),
+             '{posts_this_month}', '0'::jsonb
+           ),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [targetUserId]
+    );
+
+    // 7. Record security audit log
+    await query(
+      `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, metadata)
+       VALUES ($1, 'ASSIGN_PACKAGE', 'USER_SUBSCRIPTION', $2, $3)`,
+      [
+        adminUserId,
+        subRes.rows[0].id,
+        JSON.stringify({
+          target_user_id: targetUserId,
+          target_email: user.email,
+          assigned_plan: plan.name,
+          plan_display_name: plan.display_name,
+          billing_cycle: billingCycle,
+          max_posts_per_month: plan.max_posts_per_month,
+          max_social_accounts: plan.max_social_accounts
+        })
+      ]
+    );
+
+    return {
+      success: true,
+      user: { id: user.id, email: user.email, name: user.name },
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        display_name: plan.display_name,
+        max_posts_per_month: plan.max_posts_per_month,
+        max_social_accounts: plan.max_social_accounts,
+        max_ai_generations: plan.max_ai_generations,
+        max_ai_images: plan.max_ai_images
+      },
+      subscription: subRes.rows[0]
+    };
+  }
+
+  async triggerSubscriptionExpiryCheck() {
+    const result = await processExpiredSubscriptions();
+    return result;
   }
 }

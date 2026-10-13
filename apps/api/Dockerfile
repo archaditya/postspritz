@@ -40,4 +40,4 @@ WORKDIR /app/apps/api
 EXPOSE 4000
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
   CMD curl -f http://localhost:4000/health || exit 1
-CMD ["node", "dist/server.js"]
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/server.js"]
