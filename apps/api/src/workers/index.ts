@@ -3,6 +3,7 @@ import { tokenRefreshWorker } from './token-refresh.worker';
 import { notificationWorker } from './notification.worker';
 import { cleanupWorker } from './cleanup.worker';
 import { subscriptionWorker } from './subscription-expiry.worker';
+import { postSchedulerWorker, postSchedulerQueue } from './post-scheduler.worker';
 import { cleanupQueue, tokenRefreshQueue, subscriptionQueue } from '../config/bullmq';
 import { logger } from '../config/logger';
 
@@ -15,6 +16,10 @@ export function startWorkers() {
 
   publisherWorker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err: err.message }, 'Publisher job failed');
+  });
+
+  postSchedulerWorker.on('failed', (job, err) => {
+    logger.error({ jobId: job?.id, err: err.message }, 'Post scheduler reconciliation job failed');
   });
 
   tokenRefreshWorker.on('failed', (job, err) => {
@@ -39,6 +44,18 @@ export function startWorkers() {
 
   subscriptionWorker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err: err.message }, 'Subscription expiry scan job failed');
+  });
+
+  // Schedule 1-minute post reconciliation job
+  postSchedulerQueue.add(
+    'reconcile-scheduled-posts',
+    {},
+    {
+      repeat: { pattern: '* * * * *' }, // Every minute
+      jobId: 'cron_scheduled_posts_reconcile',
+    }
+  ).catch((err) => {
+    logger.warn({ err }, 'Could not register cron_scheduled_posts_reconcile');
   });
 
   // Schedule daily data retention backoff purge job (midnight UTC)
@@ -77,13 +94,14 @@ export function startWorkers() {
     logger.warn({ err }, 'Could not register cron_subscription_expiry');
   });
 
-  logger.info('✅ All 5 background workers active (Publisher, TokenRefresh, Notification, Cleanup/Retention, SubscriptionExpiry)');
+  logger.info('✅ All 6 background workers active (Publisher, PostScheduler, TokenRefresh, Notification, Cleanup/Retention, SubscriptionExpiry)');
 }
 
 export async function stopWorkers() {
   logger.info('Shutting down background workers...');
   await Promise.allSettled([
     publisherWorker.close(),
+    postSchedulerWorker.close(),
     tokenRefreshWorker.close(),
     notificationWorker.close(),
     cleanupWorker.close(),

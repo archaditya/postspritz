@@ -39,6 +39,17 @@ export class SocialAccountsService {
   }
 
   async getAuthUrl(platform: SocialPlatform, userId: string): Promise<string> {
+    if (platform === SocialPlatform.X) {
+      const userRes = await query('SELECT plan_name, role FROM users WHERE id = $1', [userId]);
+      const user = userRes.rows[0];
+      if (user && user.plan_name === 'free' && user.role !== 'admin' && user.role !== 'superadmin') {
+        throw new AppError(
+          'X (Twitter) integration is reserved for Pro and Enterprise plans due to direct API pass-through billing requirements. Please upgrade your plan to connect X.',
+          403
+        );
+      }
+    }
+
     const provider = this.getProvider(platform);
     const state = crypto.randomBytes(24).toString('hex');
 

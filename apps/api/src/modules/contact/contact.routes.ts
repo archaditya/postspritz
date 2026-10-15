@@ -17,7 +17,8 @@ const contactRateLimiter = createRateLimiter({
 // Public submission
 router.post('/', contactRateLimiter, controller.submit);
 
-// Admin view inquiries
+// Admin view and update inquiries
 router.get('/', authenticate, requireRole('superadmin', 'admin'), controller.list);
+router.patch('/:id/status', authenticate, requireRole('superadmin', 'admin'), controller.updateStatus);
 
 export const contactRoutes = router;

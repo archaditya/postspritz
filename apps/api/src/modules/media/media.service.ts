@@ -7,6 +7,8 @@ import { r2Client, r2Config } from '../../config/r2';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { logger } from '../../config/logger';
 
+import { validateMagicBytes } from './magic-bytes';
+
 export class MediaService {
   private repo: MediaRepository;
 
@@ -29,8 +31,18 @@ export class MediaService {
       throw new AppError('No file provided for upload', 400);
     }
 
-    const ext = path.extname(file.originalname);
-    const storageKey = `media/${userId}/${uuidv4()}${ext}`;
+    const magicCheck = validateMagicBytes(file.buffer);
+    if (!magicCheck.valid) {
+      throw new AppError(
+        'Security validation failed: File binary signature does not match authentic image (JPEG, PNG, WebP, GIF) or video (MP4, WebM).',
+        400
+      );
+    }
+
+    const verifiedMime = magicCheck.detectedMime || file.mimetype;
+    const ext = path.extname(file.originalname) || (magicCheck.category === 'video' ? '.mp4' : '.png');
+    // Ephemeral staging prefix for social media post dispatches
+    const storageKey = `staging/posts/${userId}/${uuidv4()}${ext}`;
 
     // Upload to Cloudflare R2 / S3
     try {
@@ -103,5 +115,19 @@ export class MediaService {
       throw new AppError('Media asset not found', 404);
     }
     return { message: 'Media asset deleted successfully' };
+  }
+
+  async purgeStagedMedia(storageKey: string) {
+    try {
+      await r2Client.send(
+        new DeleteObjectCommand({
+          Bucket: r2Config.bucketName,
+          Key: storageKey,
+        })
+      );
+      logger.info({ storageKey }, 'Ephemeral staged media object deleted from R2 storage');
+    } catch (err: any) {
+      logger.warn({ err: err?.message, storageKey }, 'R2 purge dispatch failed or skipped');
+    }
   }
 }

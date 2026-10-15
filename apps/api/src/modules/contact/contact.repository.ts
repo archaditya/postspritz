@@ -29,12 +29,33 @@ export class ContactRepository {
 
   async list(limit = 50, offset = 0) {
     const res = await query(
-      `SELECT id, name, email, subject, message, status, ip_address, created_at
+      `SELECT id, name, email, subject, message, status, ip_address, created_at, updated_at
        FROM contact_inquiries
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
     return res.rows;
+  }
+
+  async getById(id: string) {
+    const res = await query(
+      `SELECT id, name, email, subject, message, status, ip_address, created_at, updated_at
+       FROM contact_inquiries
+       WHERE id = $1`,
+      [id]
+    );
+    return res.rows[0] || null;
+  }
+
+  async updateStatus(id: string, status: string) {
+    const res = await query(
+      `UPDATE contact_inquiries
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, name, email, subject, message, status, created_at, updated_at`,
+      [status, id]
+    );
+    return res.rows[0] || null;
   }
 }

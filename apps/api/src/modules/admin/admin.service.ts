@@ -4,6 +4,8 @@ import { redis } from '../../config/redis';
 import { firebaseService } from '../../services/firebase.service';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { processExpiredSubscriptions } from '../../workers/subscription-expiry.worker';
+import { listAvailableLogs, getLogFilePath as resolveLogPath, readLogLines } from '../../config/log-rotator';
+import { AuditLogService } from '../../services/audit-log.service';
 
 export class AdminService {
   async listUsers(page = 1, limit = 20, search?: string) {
@@ -382,5 +384,211 @@ export class AdminService {
   async triggerSubscriptionExpiryCheck() {
     const result = await processExpiredSubscriptions();
     return result;
+  }
+
+  async getAvailableLogs() {
+    return listAvailableLogs();
+  }
+
+  getLogFilePath(filename: string) {
+    return resolveLogPath(filename);
+  }
+
+  previewLogLines(filename: string, search?: string, limit = 200) {
+    return readLogLines(filename, search, limit);
+  }
+
+  async getObservabilityLlmCalls(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    model?: string;
+    purpose?: string;
+    status?: string;
+    timeframe?: string;
+  }) {
+    const page = params.page || 1;
+    const limit = params.limit || 25;
+    const offset = (page - 1) * limit;
+
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    // Timeframe filter: 24h, 7d, 30d, 6m, 1y
+    if (params.timeframe) {
+      const tf = params.timeframe;
+      if (tf === '24h') conditions.push(`l.created_at >= NOW() - INTERVAL '24 hours'`);
+      else if (tf === '7d') conditions.push(`l.created_at >= NOW() - INTERVAL '7 days'`);
+      else if (tf === '30d') conditions.push(`l.created_at >= NOW() - INTERVAL '30 days'`);
+      else if (tf === '6m') conditions.push(`l.created_at >= NOW() - INTERVAL '6 months'`);
+      else if (tf === '1y') conditions.push(`l.created_at >= NOW() - INTERVAL '1 year'`);
+    }
+
+    if (params.model) {
+      conditions.push(`l.model ILIKE $${idx++}`);
+      values.push(`%${params.model}%`);
+    }
+
+    if (params.purpose) {
+      conditions.push(`l.purpose = $${idx++}`);
+      values.push(params.purpose);
+    }
+
+    if (params.status) {
+      conditions.push(`l.status = $${idx++}`);
+      values.push(params.status);
+    }
+
+    if (params.search) {
+      conditions.push(`(
+        l.search_vector @@ plainto_tsquery('english', $${idx})
+        OR l.prompt ILIKE $${idx + 1}
+        OR COALESCE(l.response_preview, '') ILIKE $${idx + 1}
+      )`);
+      values.push(params.search);
+      values.push(`%${params.search}%`);
+      idx += 2;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Overall summary metrics
+    const statsRes = await query(
+      `SELECT
+        COUNT(*)::int as total_calls,
+        COALESCE(SUM(total_tokens), 0)::bigint as total_tokens,
+        COALESCE(SUM(prompt_tokens), 0)::bigint as total_prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::bigint as total_completion_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0)::numeric(10, 4) as total_cost_usd,
+        COALESCE(AVG(latency_ms), 0)::int as avg_latency_ms,
+        COALESCE(COUNT(*) FILTER (WHERE status != 'success'), 0)::int as failed_calls
+       FROM llm_calls l ${whereClause}`,
+      values
+    );
+
+    const stats = statsRes.rows[0] || {};
+    const totalCalls = stats.total_calls || 0;
+
+    // Paginated list
+    values.push(limit, offset);
+    const listRes = await query(
+      `SELECT
+        l.id, l.user_id, u.email as user_email, u.name as user_name,
+        l.purpose, l.model, l.provider, l.prompt, l.response_preview,
+        l.prompt_tokens, l.completion_tokens, l.total_tokens,
+        l.estimated_cost_usd, l.latency_ms, l.status, l.last_error,
+        l.embedding_model, l.metadata, l.created_at
+       FROM llm_calls l
+       LEFT JOIN users u ON u.id = l.user_id
+       ${whereClause}
+       ORDER BY l.created_at DESC
+       LIMIT $${idx++} OFFSET $${idx}`,
+      values
+    );
+
+    return {
+      calls: listRes.rows,
+      total: totalCalls,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCalls / limit),
+      summary: {
+        totalCalls,
+        totalTokens: Number(stats.total_tokens || 0),
+        totalPromptTokens: Number(stats.total_prompt_tokens || 0),
+        totalCompletionTokens: Number(stats.total_completion_tokens || 0),
+        totalCostUsd: Number(stats.total_cost_usd || 0),
+        avgLatencyMs: Number(stats.avg_latency_ms || 0),
+        failedCalls: Number(stats.failed_calls || 0),
+        successRate: totalCalls > 0 ? Number((((totalCalls - stats.failed_calls) / totalCalls) * 100).toFixed(1)) : 100
+      }
+    };
+  }
+
+  async getObservabilityAuditLogs(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    entity?: string;
+    action?: string;
+    status?: string;
+    timeframe?: string;
+  }) {
+    let startDate: string | undefined;
+    const now = new Date();
+    if (params.timeframe === '24h') {
+      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    } else if (params.timeframe === '7d') {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (params.timeframe === '30d') {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (params.timeframe === '6m') {
+      startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (params.timeframe === '1y') {
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    return AuditLogService.getInstance().getAdminLogs({
+      page: params.page,
+      limit: params.limit,
+      search: params.search,
+      entity: params.entity,
+      action: params.action,
+      status: params.status,
+      startDate
+    });
+  }
+
+  async getObservabilityReliability(timeframe = '30d') {
+    let interval = '30 days';
+    if (timeframe === '24h') interval = '24 hours';
+    else if (timeframe === '7d') interval = '7 days';
+    else if (timeframe === '6m') interval = '6 months';
+    else if (timeframe === '1y') interval = '1 year';
+
+    const [postTargetsRes, notifsRes, monthlyTrendRes] = await Promise.all([
+      query(`
+        SELECT
+          COUNT(*)::int as total_dispatches,
+          COUNT(*) FILTER (WHERE status = 'published')::int as successful_dispatches,
+          COUNT(*) FILTER (WHERE status = 'failed')::int as failed_dispatches,
+          COUNT(*) FILTER (WHERE status IN ('pending', 'publishing'))::int as active_in_queue,
+          COALESCE(AVG(retry_count), 0)::numeric(4, 2) as avg_retries,
+          COALESCE(SUM(cost_incurred), 0)::numeric(10, 4) as pass_through_cost_usd
+        FROM post_targets
+        WHERE created_at >= NOW() - ($1 || '::interval')::interval
+      `, [interval]),
+
+      query(`
+        SELECT
+          COUNT(*)::int as total_notifications,
+          COUNT(*) FILTER (WHERE read = true)::int as read_inapp,
+          COUNT(*) FILTER (WHERE email_sent = true)::int as email_sent_count,
+          COUNT(*) FILTER (WHERE fcm_sent = true)::int as fcm_sent_count,
+          COUNT(*) FILTER (WHERE delivery_status = 'failed')::int as failed_notifications
+        FROM notifications
+        WHERE created_at >= NOW() - ($1 || '::interval')::interval
+      `, [interval]),
+
+      // 6-month or 1-year historical monthly aggregation for cost and volume
+      query(`
+        SELECT
+          to_char(created_at, 'YYYY-MM') as month,
+          COUNT(*)::int as call_count,
+          COALESCE(SUM(total_tokens), 0)::bigint as tokens,
+          COALESCE(SUM(estimated_cost_usd), 0)::numeric(10, 4) as cost_usd
+        FROM llm_calls
+        WHERE created_at >= NOW() - INTERVAL '12 months'
+        GROUP BY to_char(created_at, 'YYYY-MM')
+        ORDER BY month ASC
+      `)
+    ]);
+
+    return {
+      postReliability: postTargetsRes.rows[0] || {},
+      notificationReliability: notifsRes.rows[0] || {},
+      monthlyCostTrend: monthlyTrendRes.rows || []
+    };
   }
 }

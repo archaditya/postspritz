@@ -21,4 +21,14 @@ router.post('/users/:id/assign-package', controller.assignPlan);
 router.post('/system/trigger-expiry', controller.triggerSubscriptionExpiry);
 router.post('/notifications/broadcast', controller.broadcastNotification);
 
+// Daily Rotating Log Files Endpoints
+router.get('/system/logs', controller.listLogs);
+router.get('/system/logs/:filename/download', controller.downloadLog);
+router.get('/system/logs/:filename/preview', controller.previewLog);
+
+// Observability, LLM Call Tracing, and Complete Audit Log Endpoints
+router.get('/observability/llm-calls', controller.getObservabilityLlmCalls);
+router.get('/observability/audit-logs', controller.getObservabilityAuditLogs);
+router.get('/observability/reliability', controller.getObservabilityReliability);
+
 export const adminRoutes = router;

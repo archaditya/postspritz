@@ -37,31 +37,57 @@ export const notificationWorker = new Worker(
       const notif = notifRes.rows[0];
 
       // 2. Real-time broadcast via Redis Pub/Sub for SSE clients
-      await redis.publish(`notifications:${userId}`, JSON.stringify(notif));
+      try {
+        await redis.publish(`notifications:${userId}`, JSON.stringify(notif));
+      } catch (redisErr) {
+        logger.warn({ err: (redisErr as any)?.message }, 'Redis pub/sub broadcast skipped');
+      }
+
+      let fcmSent = false;
+      let emailSent = false;
 
       // 3. Firebase Cloud Messaging (FCM) Push to user's registered devices
-      await firebaseService.sendPushNotification(userId, {
-        title,
-        body,
-        clickUrl: '/dashboard/posts',
-        data: { postId, type }
-      });
+      try {
+        await firebaseService.sendPushNotification(userId, {
+          title,
+          body,
+          clickUrl: '/dashboard/posts',
+          data: { postId, type }
+        });
+        fcmSent = true;
+      } catch (fcmErr: any) {
+        logger.warn({ err: fcmErr.message, userId }, 'FCM push notification dispatch skipped or failed');
+      }
 
       // 4. Email dispatch (if user preferences allow)
       const notifSettings = user.notification_settings || {};
-      if (isSuccess && notifSettings.email_on_publish !== false) {
-        await emailService.sendEmail(
-          user.email,
-          title,
-          `<p>Hello ${user.name || 'there'},</p><p>${body}</p><p><a href="/dashboard/posts">View in Dashboard</a></p>`
-        );
-      } else if (!isSuccess && notifSettings.email_on_failure !== false) {
-        await emailService.sendEmail(
-          user.email,
-          title,
-          `<p>Hello ${user.name || 'there'},</p><p>${body}</p><p><a href="/dashboard/posts">Retry in Dashboard</a></p>`
-        );
+      try {
+        if (isSuccess && notifSettings.email_on_publish !== false) {
+          await emailService.sendEmail(
+            user.email,
+            title,
+            `<p>Hello ${user.name || 'there'},</p><p>${body}</p><p><a href="/dashboard/posts">View in Dashboard</a></p>`
+          );
+          emailSent = true;
+        } else if (!isSuccess && notifSettings.email_on_failure !== false) {
+          await emailService.sendEmail(
+            user.email,
+            title,
+            `<p>Hello ${user.name || 'there'},</p><p>${body}</p><p><a href="/dashboard/posts">Retry in Dashboard</a></p>`
+          );
+          emailSent = true;
+        }
+      } catch (emailErr: any) {
+        logger.warn({ err: emailErr.message, email: user.email }, 'Email notification dispatch skipped or failed');
       }
+
+      // 5. Update delivery flags on notification record
+      await query(
+        `UPDATE notifications
+         SET delivery_status = 'delivered', email_sent = $1, fcm_sent = $2
+         WHERE id = $3`,
+        [emailSent, fcmSent, notif.id]
+      );
     } else if (name === 'account-expired') {
       const { userId, platform, accountName } = data;
       const userRes = await query('SELECT email, name FROM users WHERE id = $1', [userId]);

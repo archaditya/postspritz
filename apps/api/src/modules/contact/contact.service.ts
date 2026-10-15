@@ -39,4 +39,17 @@ export class ContactService {
   async getInquiries(limit = 50, offset = 0) {
     return this.repo.list(limit, offset);
   }
+
+  async updateInquiryStatus(id: string, status: string) {
+    const validStatuses = ['new', 'in_progress', 'resolved', 'archived'];
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}`);
+    }
+
+    const updated = await this.repo.updateStatus(id, status);
+    if (!updated) {
+      throw new Error('Inquiry not found');
+    }
+    return updated;
+  }
 }

@@ -15,17 +15,21 @@ import {
   Coins,
   ShieldCheck,
   Maximize2,
+  Lock,
+  ArrowUpRight,
 } from 'lucide-react';
 import { useComposeStore } from '../../../lib/stores/useComposeStore';
 import { useAI } from '../../../lib/hooks/useAI';
 import { usePosts } from '../../../lib/hooks/usePosts';
 import { useAccounts } from '../../../lib/hooks/useAccounts';
+import { useAuth } from '../../../lib/hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../../../components/ui/card';
-import { Dialog, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
+import Link from 'next/link';
 
 const PLATFORMS = [
   { id: 'linkedin', name: 'LinkedIn', isPaid: false, maxChars: 3000 },
@@ -54,13 +58,17 @@ export default function ComposePage() {
     reset,
   } = useComposeStore();
 
+  const { user } = useAuth();
   const { accounts } = useAccounts();
   const { createPost, isCreating } = usePosts();
   const { generatePost, isGeneratingPost, generateImages, isGeneratingImages } = useAI();
 
+  const isFreeTier = (user?.plan_name === 'free' || !user?.plan_name) && user?.role !== 'admin' && user?.role !== 'superadmin';
+
   // AI Modal States
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [xProModalOpen, setXProModalOpen] = useState(false);
   const [aiTopic, setAiTopic] = useState('');
   const [aiTopicError, setAiTopicError] = useState<string | null>(null);
   const [aiTone, setAiTone] = useState<'professional' | 'casual' | 'storytelling' | 'bold'>('professional');
@@ -298,10 +306,16 @@ export default function ComposePage() {
                 {PLATFORMS.map((plat) => {
                   const isSelected = selectedPlatforms.includes(plat.id);
                   const isExceeded = isSelected && content.length > plat.maxChars;
+                  const isXLocked = plat.id === 'x' && isFreeTier;
+
                   return (
                     <button
                       key={plat.id}
                       onClick={() => {
+                        if (isXLocked) {
+                          setXProModalOpen(true);
+                          return;
+                        }
                         togglePlatform(plat.id);
                         setTouched((prev) => ({ ...prev, platforms: true }));
                       }}
@@ -310,11 +324,18 @@ export default function ComposePage() {
                           ? 'bg-destructive/15 text-destructive border-destructive shadow-sm'
                           : isSelected
                           ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                          : isXLocked
+                          ? 'bg-white/[0.02] text-neutral-400 border-white/10 hover:border-amber-500/40 hover:text-amber-300'
                           : 'bg-card text-muted-foreground border-border hover:border-foreground/30 hover:text-foreground'
                       }`}
                     >
                       <span>{plat.name}</span>
-                      {plat.isPaid && (
+                      {isXLocked && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase border border-amber-500/40 text-amber-300 bg-amber-500/10 flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5" /> Pro Only
+                        </span>
+                      )}
+                      {plat.isPaid && !isXLocked && (
                         <span
                           className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
                             isSelected
@@ -755,6 +776,51 @@ export default function ComposePage() {
               ))}
             </div>
           )}
+        </div>
+      </Dialog>
+
+      {/* X (Twitter) Pro Plan Requirement Modal */}
+      <Dialog open={xProModalOpen} onOpenChange={setXProModalOpen}>
+        <div className="max-w-md p-6 space-y-5 rounded-xl border border-white/10 bg-[#0e0e0e] text-white">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-2">
+              <Lock className="w-5 h-5 text-amber-400" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-white">X (Twitter) Publishing Requires Pro</DialogTitle>
+            <DialogDescription className="text-xs text-neutral-400">
+              Direct API pass-through billing applies to all tweets posted to X.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-xs text-neutral-300 leading-relaxed">
+            <p>
+              X Developer API charges third-party platforms directly for each publish action (<strong className="text-white">$0.015</strong> for text, <strong className="text-white">$0.20</strong> with media/links).
+            </p>
+            <p>
+              To maintain reliable dispatches without surprise failures, X publishing is reserved for users on a <strong className="text-white">Pro Starter</strong>, <strong className="text-white">Growth Pro</strong>, or <strong className="text-white">Enterprise</strong> plan with an active Fuel Wallet.
+            </p>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setXProModalOpen(false)}
+              className="text-xs text-neutral-400 hover:text-white"
+            >
+              Cancel
+            </Button>
+            <Link href="/dashboard/billing" className="w-full sm:w-auto">
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full gap-1.5 text-xs font-semibold rounded-none rounded-tr-lg rounded-bl-lg bg-white text-black hover:bg-neutral-200"
+              >
+                Upgrade to Pro in Billing
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Button>
+            </Link>
+          </DialogFooter>
         </div>
       </Dialog>
     </div>

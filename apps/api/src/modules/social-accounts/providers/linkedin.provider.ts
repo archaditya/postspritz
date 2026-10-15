@@ -1,6 +1,7 @@
 import { SocialPlatform, AccountType } from '@pushpost/shared-types';
 import { SocialProvider, TokenSet, SocialProfile, PublishContent, PublishResult } from './provider.interface';
 import { env } from '../../../config/env';
+import { logger } from '../../../config/logger';
 
 export class LinkedInProvider implements SocialProvider {
   readonly platform = SocialPlatform.LINKEDIN;
@@ -79,15 +80,72 @@ export class LinkedInProvider implements SocialProvider {
   }
 
   async publishPost(accessToken: string, targetAccountId: string, content: PublishContent): Promise<PublishResult> {
+    const authorUrn = `urn:li:person:${targetAccountId}`;
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'X-Restli-Protocol-Version': '2.0.0',
+      'Content-Type': 'application/json'
+    };
+
+    let mediaCategory = 'NONE';
+    let mediaItem: any = undefined;
+
+    if (content.mediaUrls && content.mediaUrls.length > 0) {
+      try {
+        const imageUrl = content.mediaUrls[0];
+        // 1. Register image upload
+        const regRes = await fetch('https://api.linkedin.com/v2/assets?action=registerUpload', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            registerUploadRequest: {
+              recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+              owner: authorUrn,
+              serviceRelationships: [
+                {
+                  relationshipType: 'OWNER',
+                  identifier: 'urn:li:userGeneratedContent'
+                }
+              ]
+            }
+          })
+        });
+        const regData = await regRes.json();
+        const uploadUrl = regData.value?.uploadMechanism?.['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest']?.uploadUrl;
+        const assetUrn = regData.value?.asset;
+
+        if (uploadUrl && assetUrn) {
+          // 2. Fetch media binary stream
+          const imgBlob = await fetch(imageUrl).then(r => r.arrayBuffer());
+
+          // 3. Upload binary to LinkedIn upload URL
+          await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'image/png'
+            },
+            body: imgBlob
+          });
+
+          mediaCategory = 'IMAGE';
+          mediaItem = [{ status: 'READY', media: assetUrn }];
+        }
+      } catch (err: any) {
+        logger.warn({ err: err?.message }, 'LinkedIn image upload skipped or failed, falling back to text post');
+      }
+    }
+
     const body: any = {
-      author: `urn:li:person:${targetAccountId}`,
+      author: authorUrn,
       lifecycleState: 'PUBLISHED',
       specificContent: {
         'com.linkedin.ugc.ShareContent': {
           shareCommentary: {
             text: content.text
           },
-          shareMediaCategory: 'NONE'
+          shareMediaCategory: mediaCategory,
+          ...(mediaItem ? { media: mediaItem } : {})
         }
       },
       visibility: {
@@ -97,15 +155,16 @@ export class LinkedInProvider implements SocialProvider {
 
     const res = await fetch('https://api.linkedin.com/v2/ugcPosts', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'X-Restli-Protocol-Version': '2.0.0',
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify(body)
     });
 
     const data = await res.json();
+    if (!res.ok) {
+      const errMsg = data.message || data.error?.message || `LinkedIn API returned ${res.status}`;
+      throw new Error(errMsg);
+    }
+
     const platformPostId = data.id || res.headers.get('x-restli-id') || 'unknown';
 
     return {

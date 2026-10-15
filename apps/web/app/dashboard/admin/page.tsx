@@ -30,6 +30,10 @@ import {
   Check,
   Lock,
   Package,
+  MessageSquare,
+  Mail,
+  Download,
+  Terminal,
 } from 'lucide-react';
 import { apiClient } from '../../../lib/api-client';
 import { Button } from '../../../components/ui/button';
@@ -43,6 +47,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { StatCard } from '../../../components/StatCard';
 import { DataTable, Column } from '../../../components/common/table/DataTable';
 import { formatCurrency } from '../../../lib/utils';
+import { AdminObservabilityView } from '../../../components/admin/AdminObservabilityView';
 
 export default function AdminGovernancePage() {
   const queryClient = useQueryClient();
@@ -75,6 +80,12 @@ export default function AdminGovernancePage() {
     actionUrl: '/dashboard/billing',
   });
   const [broadcastResult, setBroadcastResult] = useState<any | null>(null);
+
+  // Daily Log Explorer State
+  const [selectedLogDate, setSelectedLogDate] = useState<string>('');
+  const [selectedLogType, setSelectedLogType] = useState<'app' | 'error'>('app');
+  const [logSearchTerm, setLogSearchTerm] = useState<string>('');
+  const [isDownloadingLog, setIsDownloadingLog] = useState(false);
 
   // 1. Fetch System Telemetry & Platform Stats
   const {
@@ -208,6 +219,83 @@ export default function AdminGovernancePage() {
       queryClient.invalidateQueries({ queryKey: ['admin-plans'] });
     },
   });
+
+  // 7. Fetch Support Inquiries
+  const {
+    data: inquiriesData,
+    isLoading: inquiriesLoading,
+    refetch: refetchInquiries,
+  } = useQuery({
+    queryKey: ['admin-inquiries'],
+    queryFn: async () => {
+      const res = await apiClient.get('/contact');
+      return res.data?.data || [];
+    },
+  });
+
+  const updateInquiryStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiClient.patch(`/contact/${id}/status`, { status });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-inquiries'] });
+    },
+  });
+
+  // 8. Fetch Daily Log Files List
+  const {
+    data: logsData,
+    isLoading: logsLoading,
+    refetch: refetchLogs,
+  } = useQuery({
+    queryKey: ['admin-logs-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/admin/system/logs');
+      return res.data?.data || [];
+    },
+    enabled: activeTab === 'logs',
+  });
+
+  const activeDate = selectedLogDate || (logsData && logsData[0]?.date) || '';
+  const activeLogFilename = activeDate ? `${selectedLogType}-${activeDate}.log` : '';
+
+  // Log preview lines
+  const {
+    data: logPreviewData,
+    isLoading: logPreviewLoading,
+    refetch: refetchLogPreview,
+  } = useQuery({
+    queryKey: ['admin-log-preview', activeLogFilename, logSearchTerm],
+    queryFn: async () => {
+      if (!activeLogFilename) return { lines: [], count: 0 };
+      const res = await apiClient.get(`/admin/system/logs/${activeLogFilename}/preview`, {
+        params: { search: logSearchTerm || undefined, limit: 200 }
+      });
+      return res.data?.data || { lines: [], count: 0 };
+    },
+    enabled: !!activeLogFilename && activeTab === 'logs',
+  });
+
+  const handleDownloadLog = async (filename: string) => {
+    setIsDownloadingLog(true);
+    try {
+      const res = await apiClient.get(`/admin/system/logs/${filename}/download`, {
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err: any) {
+      alert('Failed to download log: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsDownloadingLog(false);
+    }
+  };
 
   // Broadcast Notification Dispatch Mutation
   const broadcastMutation = useMutation({
@@ -522,6 +610,21 @@ export default function AdminGovernancePage() {
             <Badge variant="outline" className="text-[10px] ml-1 py-0 px-1.5 border-border">
               {plansData?.length ?? 3}
             </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="inquiries" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
+            <MessageSquare className="w-3.5 h-3.5" /> Support Tickets
+            <Badge variant="outline" className="text-[10px] ml-1 py-0 px-1.5 border-border">
+              {inquiriesData?.length ?? 0}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
+            <Terminal className="w-3.5 h-3.5" /> System Logs (30d)
+            <Badge variant="outline" className="text-[10px] ml-1 py-0 px-1.5 border-border">
+              {logsData?.length ?? 0}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="observability" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <Sparkles className="w-3.5 h-3.5 text-purple-300" /> Observability & Costs
           </TabsTrigger>
           <TabsTrigger value="overview" className="gap-2 text-xs font-semibold rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white">
             <Activity className="w-3.5 h-3.5" /> Circuit Breakers
@@ -1301,6 +1404,309 @@ export default function AdminGovernancePage() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        {/* 6. SUPPORT TICKETS & USER INQUIRIES TAB */}
+        <TabsContent value="inquiries" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-primary" /> User Support Inquiries & Tickets
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Review, respond to, and resolve incoming messages from registered creators and prospective users.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchInquiries()}
+              className="text-xs h-8 gap-1.5 self-start sm:self-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh Inquiries
+            </Button>
+          </div>
+
+          {inquiriesLoading ? (
+            <div className="py-12 text-center text-xs text-muted-foreground">
+              Loading support tickets...
+            </div>
+          ) : !inquiriesData || inquiriesData.length === 0 ? (
+            <Card className="p-8 text-center border-dashed">
+              <MessageSquare className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-foreground">No Support Tickets Yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Any inquiries submitted through the contact page or user dashboard will appear here in real-time.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {inquiriesData.map((item: any) => (
+                <Card key={item.id} className="p-4 space-y-3 bg-card/60 border-border/80">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar
+                        alt={item.name}
+                        className="w-8 h-8 border border-border text-xs font-bold"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-foreground">{item.name}</span>
+                          <a
+                            href={`mailto:${item.email}`}
+                            className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1"
+                          >
+                            <Mail className="w-3 h-3" /> {item.email}
+                          </a>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          Submitted on {new Date(item.created_at).toLocaleString()} {item.ip_address ? `· IP: ${item.ip_address}` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] uppercase font-bold py-0.5 px-2 ${
+                          item.status === 'new'
+                            ? 'border-amber-500/40 text-amber-400 bg-amber-500/10'
+                            : item.status === 'in_progress'
+                            ? 'border-blue-500/40 text-blue-400 bg-blue-500/10'
+                            : item.status === 'resolved'
+                            ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10'
+                            : 'border-border text-muted-foreground'
+                        }`}
+                      >
+                        {item.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {item.subject && (
+                    <p className="text-xs font-semibold text-foreground">
+                      Subject: {item.subject}
+                    </p>
+                  )}
+
+                  <p className="text-xs text-muted-foreground leading-relaxed bg-muted/20 p-3 rounded-lg border border-border/30 whitespace-pre-wrap">
+                    {item.message}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <a
+                      href={`mailto:${item.email}?subject=${encodeURIComponent(`Re: ${item.subject || 'Your Support Inquiry on PostSpritz'}`)}`}
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline font-semibold"
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Reply via Email
+                    </a>
+
+                    <div className="flex items-center gap-1.5">
+                      {item.status !== 'in_progress' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateInquiryStatusMutation.mutate({ id: item.id, status: 'in_progress' })}
+                          isLoading={updateInquiryStatusMutation.isPending}
+                          className="text-[10px] h-6 px-2 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                        >
+                          Mark In Progress
+                        </Button>
+                      )}
+                      {item.status !== 'resolved' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateInquiryStatusMutation.mutate({ id: item.id, status: 'resolved' })}
+                          isLoading={updateInquiryStatusMutation.isPending}
+                          className="text-[10px] h-6 px-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                        >
+                          Mark Resolved
+                        </Button>
+                      )}
+                      {item.status !== 'archived' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => updateInquiryStatusMutation.mutate({ id: item.id, status: 'archived' })}
+                          isLoading={updateInquiryStatusMutation.isPending}
+                          className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground"
+                        >
+                          Archive
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* 7. DAILY SYSTEM LOGS & 30-DAY ROTATION TAB */}
+        <TabsContent value="logs" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-primary" /> Daily System Logs (30-Day Rolling Retention)
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Download raw root log files or trace specific users and jobs by User ID, Trace ID, or error signature.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  refetchLogs();
+                  refetchLogPreview();
+                }}
+                className="text-xs h-8 gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </Button>
+              {activeLogFilename && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleDownloadLog(activeLogFilename)}
+                  disabled={isDownloadingLog}
+                  className="text-xs h-8 gap-1.5 rounded-none rounded-tr-lg rounded-bl-lg bg-white text-black hover:bg-neutral-200 font-semibold"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download {activeLogFilename}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Controls: Date Picker, Type Selector, Search */}
+          <Card className="p-4 bg-card/60 border-border/80 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Date Selector */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  Select Log Date (Last 30 Days)
+                </label>
+                <select
+                  value={activeDate}
+                  onChange={(e) => setSelectedLogDate(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {logsData && logsData.length > 0 ? (
+                    logsData.map((item: any) => (
+                      <option key={item.date} value={item.date}>
+                        {item.date} ({(item.totalSizeBytes / 1024).toFixed(1)} KB total)
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No log files found</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Log Stream Type Selector */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  Log Stream Type
+                </label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={selectedLogType === 'app' ? 'default' : 'outline'}
+                    onClick={() => setSelectedLogType('app')}
+                    className="flex-1 text-xs h-9"
+                  >
+                    App Log (All)
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={selectedLogType === 'error' ? 'destructive' : 'outline'}
+                    onClick={() => setSelectedLogType('error')}
+                    className="flex-1 text-xs h-9"
+                  >
+                    Error Log Only
+                  </Button>
+                </div>
+              </div>
+
+              {/* Search / Trace Filter */}
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1.5">
+                  Filter by User ID / Trace ID / Keyword
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-muted-foreground absolute left-2.5 top-2.5" />
+                  <Input
+                    placeholder="e.g. usr_123 or req_abc or error"
+                    value={logSearchTerm}
+                    onChange={(e) => setLogSearchTerm(e.target.value)}
+                    className="pl-8 h-9 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Log Preview Window */}
+          <Card className="rounded-xl border border-border/80 bg-black/70 overflow-hidden shadow-none">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-b border-border/50 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-white font-semibold">{activeLogFilename || 'No file selected'}</span>
+                {logPreviewData && (
+                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono">
+                    {logPreviewData.count} matching lines
+                  </Badge>
+                )}
+              </div>
+              <span className="text-[11px] text-muted-foreground">Showing last 200 lines</span>
+            </div>
+
+            <div className="p-4 font-mono text-[11px] max-h-[460px] overflow-y-auto space-y-1 select-text">
+              {logPreviewLoading ? (
+                <div className="py-12 text-center text-muted-foreground">Loading log entries...</div>
+              ) : !logPreviewData || logPreviewData.lines.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  {logSearchTerm
+                    ? `No entries found matching "${logSearchTerm}" in ${activeLogFilename}.`
+                    : `No entries recorded yet in ${activeLogFilename}.`}
+                </div>
+              ) : (
+                logPreviewData.lines.map((line: string, idx: number) => {
+                  const isError = line.toLowerCase().includes('"level":50') || line.toLowerCase().includes('"error"') || line.toLowerCase().includes('error');
+                  const isWarn = line.toLowerCase().includes('"level":40') || line.toLowerCase().includes('warn');
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`py-0.5 px-2 rounded hover:bg-white/[0.04] transition-colors leading-relaxed break-all ${
+                        isError
+                          ? 'text-rose-400 bg-rose-500/10'
+                          : isWarn
+                          ? 'text-amber-300 bg-amber-500/5'
+                          : 'text-neutral-300'
+                      }`}
+                    >
+                      <span className="text-neutral-600 select-none mr-2">{(idx + 1).toString().padStart(3, '0')}</span>
+                      {line}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* 8. OBSERVABILITY, LLM CALL TRACING & SYSTEM AUDITING TAB */}
+        <TabsContent value="observability" className="space-y-4">
+          <AdminObservabilityView
+            onRefreshParent={() => {
+              refetchStats();
+              refetchQueues();
+            }}
+          />
         </TabsContent>
       </Tabs>
 

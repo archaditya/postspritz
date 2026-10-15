@@ -65,4 +65,30 @@ export class ContactController {
       next(err);
     }
   };
+
+  updateStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!status || typeof status !== 'string') {
+        throw new AppError('Status is required', 400);
+      }
+
+      const updated = await this.service.updateInquiryStatus(id, status.trim());
+
+      res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (err: any) {
+      if (err.message === 'Inquiry not found') {
+        return next(new AppError('Inquiry not found', 404));
+      }
+      if (err.message.startsWith('Invalid status:')) {
+        return next(new AppError(err.message, 400));
+      }
+      next(err);
+    }
+  };
 }

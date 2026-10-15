@@ -125,16 +125,40 @@ export function SiteChrome({
 
             {mounted && (
               <>
-                <Button asChild size="sm" variant={action.variant ?? 'outline'} className="gap-2 hidden sm:inline-flex">
-                  <Link href={action.to}>
-                    {action.label}
-                    {user && <ArrowRight className="w-3.5 h-3.5 ml-0.5" />}
-                  </Link>
-                </Button>
-                {!user && (
-                  <Button asChild size="sm" variant="glow" className="gap-2 hidden sm:inline-flex">
-                    <Link href="/register">Get Started</Link>
-                  </Button>
+                {user ? (
+                  <div className="hidden sm:flex items-center gap-2.5">
+                    <Link
+                      href={dashboardLink}
+                      className="flex items-center gap-2 py-1 px-2.5 rounded-full border border-primary/30 bg-primary/10 hover:bg-primary/20 hover:border-primary/50 transition-all text-xs font-semibold text-foreground group"
+                    >
+                      <div className="w-5 h-5 rounded-full bg-primary text-white font-bold flex items-center justify-center text-[10px] uppercase shadow-sm">
+                        {(user.fullName || user.name || user.email || 'U')[0]}
+                      </div>
+                      <span className="truncate max-w-[130px] text-xs font-medium">
+                        {user.fullName || user.name || user.email?.split('@')[0]}
+                      </span>
+                      {isAdmin && (
+                        <span className="text-[9px] uppercase font-extrabold tracking-wider px-1.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                          Admin
+                        </span>
+                      )}
+                    </Link>
+
+                    <Button asChild size="sm" variant="glow" className="gap-1.5 h-8 text-xs font-bold shadow-sm shadow-primary/20">
+                      <Link href={dashboardLink}>
+                        Dashboard <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="hidden sm:flex items-center gap-2">
+                    <Button asChild size="sm" variant="ghost" className="gap-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+                      <Link href="/login">Sign In</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="glow" className="gap-2 text-xs font-bold shadow-sm shadow-primary/20">
+                      <Link href="/register">Get Started Free</Link>
+                    </Button>
+                  </div>
                 )}
               </>
             )}
@@ -153,34 +177,80 @@ export function SiteChrome({
 
         {/* Mobile menu dropdown */}
         {showNav && mobileMenuOpen && (
-          <div className="md:hidden border-t border-border/60 bg-background/95 backdrop-blur-xl px-5 py-4 space-y-2">
-            {[
-              { href: '/', label: 'Home' },
-              { href: '/features', label: 'Features' },
-              { href: '/pricing', label: 'Pricing' },
-              { href: '/contact', label: 'Contact' },
-            ].map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="block px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {label}
-              </Link>
-            ))}
-            <div className="pt-3 border-t border-border/60 flex flex-col gap-2">
-              <Button asChild size="sm" variant={action.variant ?? 'outline'} className="w-full justify-center">
-                <Link href={action.to} onClick={() => setMobileMenuOpen(false)}>
-                  {action.label}
+          <div className="md:hidden border-t border-border/60 bg-background/95 backdrop-blur-xl px-5 py-4 space-y-3 animate-in fade-in duration-150">
+            {/* If user is logged in, show user profile card in mobile menu */}
+            {user && (
+              <div className="p-3 rounded-xl bg-card border border-border/80 flex items-center justify-between">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-primary text-white font-bold flex items-center justify-center text-xs uppercase shrink-0">
+                    {(user.fullName || user.name || user.email || 'U')[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-foreground truncate">{user.fullName || user.name || 'User'}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                </div>
+                <Link
+                  href={dashboardLink}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg bg-primary text-white shrink-0 hover:bg-primary/90"
+                >
+                  Dashboard
                 </Link>
-              </Button>
-              {!user && (
-                <Button asChild size="sm" variant="glow" className="w-full justify-center">
-                  <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
-                    Start Free Trial
-                  </Link>
-                </Button>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              {[
+                { href: '/', label: 'Home' },
+                { href: '/features', label: 'Features' },
+                { href: '/pricing', label: 'Pricing' },
+                { href: '/contact', label: 'Contact' },
+              ].map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="block px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="pt-3 border-t border-border/60 flex flex-col gap-2">
+              {user ? (
+                <>
+                  <Button asChild size="sm" variant="glow" className="w-full justify-center">
+                    <Link href={dashboardLink} onClick={() => setMobileMenuOpen(false)}>
+                      Go to Dashboard <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      logout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full justify-center text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    Log Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild size="sm" variant="outline" className="w-full justify-center">
+                    <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                      Sign In
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="glow" className="w-full justify-center">
+                    <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
+                      Get Started Free
+                    </Link>
+                  </Button>
+                </>
               )}
             </div>
           </div>

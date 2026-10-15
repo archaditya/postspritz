@@ -151,4 +151,77 @@ export class AdminController {
       next(err);
     }
   };
+
+  listLogs = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const logs = await this.service.getAvailableLogs();
+      ApiResponse.success(res, logs, 'Available daily log files retrieved');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  downloadLog = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const filePath = this.service.getLogFilePath(req.params.filename);
+      res.download(filePath, req.params.filename);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  previewLog = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const search = req.query.search as string | undefined;
+      const limit = Number(req.query.limit) || 200;
+      const lines = this.service.previewLogLines(req.params.filename, search, limit);
+      ApiResponse.success(res, { filename: req.params.filename, lines, count: lines.length }, 'Log entries retrieved');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getObservabilityLlmCalls = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.service.getObservabilityLlmCalls({
+        page: Number(req.query.page) || 1,
+        limit: Number(req.query.limit) || 25,
+        search: req.query.search as string | undefined,
+        model: req.query.model as string | undefined,
+        purpose: req.query.purpose as string | undefined,
+        status: req.query.status as string | undefined,
+        timeframe: req.query.timeframe as string | undefined,
+      });
+      ApiResponse.success(res, result, 'LLM calls observability metrics and logs retrieved');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getObservabilityAuditLogs = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.service.getObservabilityAuditLogs({
+        page: Number(req.query.page) || 1,
+        limit: Number(req.query.limit) || 50,
+        search: req.query.search as string | undefined,
+        entity: req.query.entity as string | undefined,
+        action: req.query.action as string | undefined,
+        status: req.query.status as string | undefined,
+        timeframe: req.query.timeframe as string | undefined,
+      });
+      ApiResponse.success(res, result, 'Audit logs retrieved');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getObservabilityReliability = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const timeframe = (req.query.timeframe as string) || '30d';
+      const result = await this.service.getObservabilityReliability(timeframe);
+      ApiResponse.success(res, result, 'System reliability, delivery, and 12-month cost metrics retrieved');
+    } catch (err) {
+      next(err);
+    }
+  };
 }

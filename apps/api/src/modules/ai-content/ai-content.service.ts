@@ -2,6 +2,7 @@ import { query } from '../../db/pool';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { env } from '../../config/env';
 import { logger } from '../../config/logger';
+import { llmLogger } from '../../services/llm-logger.service';
 
 export class AiContentService {
   async generateText(userId: string, input: {
@@ -91,6 +92,28 @@ export class AiContentService {
       ) VALUES ($1, 'text', $2, $3, $4, $5, $6, 0.95, $7, 'gemini')`,
       [userId, input.topic, tokensIn, tokensOut, costUsd, latency, aiData.telemetry?.model || 'gemini-2.0-flash']
     );
+
+    // Observability: Record detailed LLM call into llm_calls table
+    const firstVariantText = (Object.values(aiData.variants || {})[0] as any)?.text || '';
+    await llmLogger.record({
+      userId,
+      purpose: 'post_text_generation',
+      model: aiData.telemetry?.model || 'gemini-2.0-flash',
+      provider: 'google',
+      prompt: input.topic,
+      responsePreview: typeof firstVariantText === 'string' ? firstVariantText : JSON.stringify(firstVariantText),
+      promptTokens: tokensIn,
+      completionTokens: tokensOut,
+      totalTokens: tokensIn + tokensOut,
+      estimatedCostUsd: costUsd,
+      latencyMs: latency,
+      status: 'success',
+      metadata: {
+        targetPlatforms: platforms,
+        tone,
+        variantsGenerated: Object.keys(aiData.variants || {}).length
+      }
+    });
 
     // 4. Increment usage count
     await query(
@@ -222,6 +245,26 @@ export class AiContentService {
         aiData.telemetry?.latency_ms || 350
       ]
     );
+
+    // Observability: Record visual expansion LLM call
+    await llmLogger.record({
+      userId,
+      purpose: 'visual_prompt_expansion',
+      model: aiData.telemetry?.model || 'imagen-3',
+      provider: 'google',
+      prompt: visionPrompt,
+      responsePreview: aiData.prompt_expansion?.expanded_prompt || visionPrompt,
+      promptTokens: 100,
+      completionTokens: 200,
+      totalTokens: 300,
+      estimatedCostUsd: aiData.telemetry?.estimated_cost_usd || (safeCount * 0.04),
+      latencyMs: aiData.telemetry?.latency_ms || 350,
+      status: 'success',
+      metadata: {
+        platform,
+        imagesRequested: safeCount
+      }
+    });
 
     // 4. Increment image usage count
     await query(

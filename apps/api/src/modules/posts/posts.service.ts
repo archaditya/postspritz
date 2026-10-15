@@ -6,6 +6,7 @@ import { AppError } from '../../middlewares/errorHandler.middleware';
 import { logger } from '../../config/logger';
 import { publisherQueue } from '../../config/bullmq';
 import { query } from '../../db/pool';
+import { AuditLogService } from '../../services/audit-log.service';
 
 export class PostsService {
   private postsRepo: PostsRepository;
@@ -86,6 +87,12 @@ export class PostsService {
     const targetPayloads = targetAccounts.map(acc => {
       let costIncurred = 0;
       if (acc.platform === SocialPlatform.X) {
+        if (userProfile?.plan_name === 'free' && !isExempt) {
+          throw new AppError(
+            'X (Twitter) publishing is reserved for Pro and Enterprise subscribers due to direct API pass-through fees. Please upgrade your plan in Billing.',
+            403
+          );
+        }
         if (!paidConsent.x) {
           throw new AppError('You have selected X (Twitter) which incurs a pass-through fee ($0.015 / $0.20 with URLs). Please enable X in Settings -> Connected Platforms to confirm cost consent.', 402);
         }
@@ -98,9 +105,9 @@ export class PostsService {
       };
     });
 
-    // 3. Determine initial status
-    let initialStatus = PostStatus.DRAFT;
+    // 3. Determine initial status & schedule
     const scheduledDate = input.scheduledAt ? new Date(input.scheduledAt) : null;
+    let initialStatus = PostStatus.PUBLISHING;
 
     if (scheduledDate) {
       if (scheduledDate.getTime() <= Date.now()) {
@@ -142,7 +149,39 @@ export class PostsService {
       [userId]
     );
 
-    logger.info({ postId: post.id, userId, status: initialStatus, postCount: currentPostsCount + 1 }, 'Post created successfully');
+    // 6. Enqueue to BullMQ Publisher Queue
+    if (scheduledDate) {
+      const delayMs = Math.max(0, scheduledDate.getTime() - Date.now());
+      await publisherQueue.add(
+        'publish-post',
+        { postId: post.id },
+        { delay: delayMs, jobId: `sched_${post.id}` }
+      );
+      logger.info({ postId: post.id, delayMs, scheduledAt: scheduledDate.toISOString() }, 'Scheduled post registered in BullMQ delayed queue');
+    } else {
+      await publisherQueue.add(
+        'publish-post',
+        { postId: post.id },
+        { jobId: `pub_${post.id}_${Date.now()}` }
+      );
+      logger.info({ postId: post.id }, 'Immediate post registered in BullMQ dispatcher queue');
+    }
+
+    // 7. Record System Audit Log
+    await AuditLogService.getInstance().log({
+      userId,
+      action: scheduledDate ? 'POST_SCHEDULED' : 'POST_DISPATCHED',
+      entity: 'posts',
+      entityId: post.id,
+      details: {
+        contentPreview: input.content.slice(0, 100),
+        targetCount: targets.length,
+        scheduledAt: scheduledDate ? scheduledDate.toISOString() : null,
+      },
+      status: 'success'
+    });
+
+    logger.info({ postId: post.id, userId, status: initialStatus, postCount: currentPostsCount + 1 }, 'Post created and queued successfully');
 
     return {
       ...post,
@@ -174,7 +213,24 @@ export class PostsService {
     if (!deleted) {
       throw new AppError('Post not found', 404);
     }
-    logger.info({ postId, userId }, 'Post deleted');
+
+    // Remove any pending delayed scheduled job from BullMQ
+    try {
+      const job = await publisherQueue.getJob(`sched_${postId}`);
+      if (job) await job.remove();
+    } catch (e) {
+      // Ignore if not present
+    }
+
+    await AuditLogService.getInstance().log({
+      userId,
+      action: 'POST_DELETED',
+      entity: 'posts',
+      entityId: postId,
+      status: 'success'
+    });
+
+    logger.info({ postId, userId }, 'Post deleted and cancelled from queue');
     return { message: 'Post deleted successfully' };
   }
 

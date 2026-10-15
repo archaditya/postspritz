@@ -6,6 +6,8 @@ import { decryptToken } from '../utils/crypto.utils';
 import { socialAccountsService, billingService } from '../container';
 import { notificationQueue } from '../config/bullmq';
 import { PostStatus, SocialPlatform } from '@pushpost/shared-types';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client, r2Config } from '../config/r2';
 
 export const publisherWorker = new Worker(
   'publisher-queue',
@@ -143,6 +145,39 @@ export const publisherWorker = new Worker(
       postId: post.id,
       status: finalPostStatus
     });
+
+    // 5. Ephemeral Media Staging Auto-Purge:
+    // Once published on all platforms, delete staged raw video/image from R2.
+    // The platforms host their own CDN copies (e.g. Meta, LinkedIn CDN).
+    if (finalPostStatus === PostStatus.PUBLISHED && post.media_ids && post.media_ids.length > 0) {
+      try {
+        const mediaToPurge = await query(
+          'SELECT id, storage_key FROM media WHERE id = ANY($1)',
+          [post.media_ids]
+        );
+        for (const item of mediaToPurge.rows) {
+          if (item.storage_key) {
+            try {
+              await r2Client.send(
+                new DeleteObjectCommand({
+                  Bucket: r2Config.bucketName,
+                  Key: item.storage_key,
+                })
+              );
+            } catch (delErr: any) {
+              logger.warn({ storageKey: item.storage_key, err: delErr?.message }, 'Failed to delete staged R2 object');
+            }
+          }
+        }
+        await query(
+          `UPDATE media SET status = 'purged', storage_url = NULL, updated_at = NOW() WHERE id = ANY($1)`,
+          [post.media_ids]
+        );
+        logger.info({ postId, mediaCount: mediaToPurge.rowCount }, 'Staged post media auto-purged from storage');
+      } catch (purgeErr: any) {
+        logger.warn({ postId, err: purgeErr?.message }, 'Non-blocking failure during ephemeral media auto-purge');
+      }
+    }
 
     logger.info({ postId, finalStatus: finalPostStatus }, 'Publisher worker completed job');
   },

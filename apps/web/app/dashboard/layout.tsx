@@ -30,6 +30,10 @@ import {
   Sparkles,
   User as UserIcon,
   ShieldCheck,
+  LifeBuoy,
+  Mail,
+  ArrowUpRight,
+  Terminal,
 } from 'lucide-react';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { useNotificationStore } from '../../lib/stores/useNotificationStore';
@@ -40,7 +44,9 @@ import { Avatar } from '../../components/ui/avatar';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
+import { apiClient } from '../../lib/api-client';
 import { formatCurrency } from '../../lib/utils';
 import {
   requestNotificationPermissionAndRegisterToken,
@@ -66,6 +72,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+
+  // In-Dashboard Support Ticket Dialog State
+  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
+  const [supportSubject, setSupportSubject] = useState('');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportSubmitting, setSupportSubmitting] = useState(false);
+  const [supportSubmitted, setSupportSubmitted] = useState(false);
+  const [supportError, setSupportError] = useState<string | null>(null);
 
   // Synchronize FCM Push Token and listen to foreground notifications
   useEffect(() => {
@@ -96,9 +110,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const adminNavItems = [
     { name: 'Governance Hub', href: '/dashboard/admin', icon: ShieldAlert },
     { name: 'User Directory', href: '/dashboard/admin?tab=users', icon: Users },
+    { name: 'Support Tickets', href: '/dashboard/admin?tab=inquiries', icon: LifeBuoy },
     { name: 'Broadcast Studio', href: '/dashboard/admin?tab=broadcast', icon: Radio },
     { name: 'Worker Queues', href: '/dashboard/admin?tab=queues', icon: Server },
     { name: 'Security Audit Trail', href: '/dashboard/admin?tab=audit', icon: Clock },
+    { name: 'System Logs', href: '/dashboard/admin?tab=logs', icon: Terminal },
+    { name: 'Packages & Quotas', href: '/dashboard/admin?tab=plans', icon: Sparkles },
     { name: 'Circuit Breakers', href: '/dashboard/admin?tab=overview', icon: Activity },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
@@ -111,11 +128,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Media Library', href: '/dashboard/media', icon: ImageIcon },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
     { name: 'Billing & Wallet', href: '/dashboard/billing', icon: CreditCard },
+    { name: 'Help & Support', href: '#support', icon: LifeBuoy, isSupportAction: true },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 
   // Pick exactly the right navigation items based on role
   const navItems = isAdmin ? adminNavItems : creatorNavItems;
+
+  const handleOpenSupport = () => {
+    setSupportSubject('');
+    setSupportMessage('');
+    setSupportSubmitted(false);
+    setSupportError(null);
+    setSupportDialogOpen(true);
+  };
+
+  const handleSubmitSupport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportMessage.trim()) return;
+
+    setSupportSubmitting(true);
+    setSupportError(null);
+    try {
+      await apiClient.post('/contact', {
+        name: user?.fullName || user?.name || 'Creator User',
+        email: user?.email || '',
+        subject: supportSubject.trim() || 'Dashboard Support Request',
+        message: supportMessage.trim(),
+      });
+      setSupportSubmitted(true);
+      setTimeout(() => {
+        setSupportDialogOpen(false);
+        setSupportSubmitted(false);
+      }, 1500);
+    } catch (err: any) {
+      setSupportError(
+        err?.response?.data?.message || 'Failed to submit inquiry. Please try again.'
+      );
+    } finally {
+      setSupportSubmitting(false);
+    }
+  };
 
   const handleOpenProfile = () => {
     setEditFullName(user?.fullName || user?.name || '');
@@ -198,25 +251,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </p>
           )}
 
-          {navItems.map((item) => {
+          {navItems.map((item: any) => {
             const Icon = item.icon;
             const isActive = pathname === item.href.split('?')[0];
+
+            if (item.isSupportAction) {
+              return (
+                <button
+                  key={item.name}
+                  onClick={handleOpenSupport}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-all"
+                  title={!sidebarOpen ? item.name : undefined}
+                >
+                  <Icon className="w-4 h-4 shrink-0 text-amber-400" />
+                  {sidebarOpen && <span className="flex-1 text-left truncate">{item.name}</span>}
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
-                    ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                    ? 'bg-white/[0.08] text-white border border-white/15'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
                 }`}
                 title={!sidebarOpen ? item.name : undefined}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 {sidebarOpen && <span className="flex-1 truncate">{item.name}</span>}
-                {sidebarOpen && (item as any).badge && (
-                  <Badge variant="glow" className="text-[9px] py-0 px-1.5 uppercase font-bold">
-                    {(item as any).badge}
+                {sidebarOpen && item.badge && (
+                  <Badge variant="outline" className="text-[9px] py-0 px-1.5 uppercase font-bold border-amber-500/30 text-amber-300">
+                    {item.badge}
                   </Badge>
                 )}
               </Link>
@@ -392,14 +460,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
           <div className="md:hidden border-b border-border bg-card/95 backdrop-blur-xl p-4 space-y-1 z-30">
-            {navItems.map((item) => {
+            {navItems.map((item: any) => {
               const Icon = item.icon;
+              if (item.isSupportAction) {
+                return (
+                  <button
+                    key={item.name}
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleOpenSupport();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-400 hover:text-white hover:bg-white/[0.04]"
+                  >
+                    <Icon className="w-4 h-4 text-amber-400" />
+                    <span>{item.name}</span>
+                  </button>
+                );
+              }
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-neutral-400 hover:text-white hover:bg-white/[0.04]"
                 >
                   <Icon className="w-4 h-4" />
                   {item.name}
@@ -518,6 +601,96 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* IN-DASHBOARD HELP & SUPPORT TICKET DIALOG */}
+      <Dialog open={supportDialogOpen} onOpenChange={setSupportDialogOpen}>
+        <div className="max-w-md p-6 space-y-4 rounded-xl border border-white/10 bg-[#0e0e0e] text-white">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <LifeBuoy className="w-5 h-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-white">Help & Support Desk</DialogTitle>
+                <DialogDescription className="text-xs text-neutral-400">
+                  Reach our engineering & platform support team directly from your dashboard.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitSupport} className="space-y-3.5 pt-2 text-xs">
+            {supportSubmitted ? (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2 font-medium">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Ticket submitted! Our operations team will respond to {user?.email} shortly.</span>
+              </div>
+            ) : (
+              <>
+                {supportError && (
+                  <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                    {supportError}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-neutral-400">Your Contact Email</label>
+                  <Input
+                    value={user?.email || ''}
+                    readOnly
+                    className="bg-white/[0.03] text-neutral-300 font-mono text-xs border-white/10"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-neutral-200">Subject / Category</label>
+                  <Input
+                    required
+                    placeholder="e.g. Account linking issue, Billing question, API limits"
+                    value={supportSubject}
+                    onChange={(e) => setSupportSubject(e.target.value)}
+                    className="text-xs bg-white/[0.03] border-white/10 text-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-neutral-200">Message / Issue Details</label>
+                  <Textarea
+                    required
+                    rows={4}
+                    placeholder="Describe what happened or what you need assistance with..."
+                    value={supportMessage}
+                    onChange={(e) => setSupportMessage(e.target.value)}
+                    className="text-xs bg-white/[0.03] border-white/10 text-white resize-none"
+                  />
+                </div>
+
+                <DialogFooter className="mt-4 pt-3 border-t border-white/10 flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSupportDialogOpen(false)}
+                    className="text-xs text-neutral-400 hover:text-white"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={supportSubmitting}
+                    className="text-xs font-semibold rounded-none rounded-tr-lg rounded-bl-lg bg-white text-black hover:bg-neutral-200 gap-1.5"
+                  >
+                    {supportSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Submit Support Ticket
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </form>
+        </div>
       </Dialog>
     </div>
   );

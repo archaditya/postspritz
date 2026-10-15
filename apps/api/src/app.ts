@@ -42,11 +42,13 @@ export const createApp = () => {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id']
   }));
 
-  // 4. Request Logging
+  // 4. Request Logging with User Tracing
   app.use(pinoHttp({
     logger,
     customProps: (req) => ({
-      reqId: req.headers['x-request-id']
+      traceId: req.headers['x-request-id'],
+      userId: (req as any).user?.id || (req as any).session?.userId || null,
+      ip: req.ip || req.socket.remoteAddress
     })
   }));
 
