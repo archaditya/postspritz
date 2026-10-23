@@ -1,5 +1,5 @@
 # apps/api/Dockerfile — PostSpritz Express API
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache curl
 
@@ -26,7 +26,7 @@ FROM base AS build
 WORKDIR /app
 RUN npm run --workspace=apps/api build
 
-FROM node:20-alpine AS prod
+FROM node:22-alpine AS prod
 RUN apk add --no-cache curl && \
     addgroup -S app && adduser -S app -G app
 WORKDIR /app

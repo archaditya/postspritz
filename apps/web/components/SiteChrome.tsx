@@ -29,7 +29,7 @@ export function SiteChrome({
   footerAction,
   className,
 }: SiteChromeProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
