@@ -58,6 +58,10 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [isAdultConfirmed, setIsAdultConfirmed] = useState(false);
+  const [isTermsAccepted, setIsTermsAccepted] = useState(false);
+  const [isMarketingOptIn, setIsMarketingOptIn] = useState(false);
+
   const [touched, setTouched] = useState<{
     fullName?: boolean;
     email?: boolean;
@@ -101,7 +105,16 @@ export default function RegisterPage() {
         : 'Passwords do not match'
       : null;
 
-  const isFormValid = isNameValid && isEmailValid && isPasswordLengthValid && isConfirmMatch;
+  const adultError = submitAttempted && !isAdultConfirmed ? 'You must confirm you are 18 years of age or older' : null;
+  const termsError = submitAttempted && !isTermsAccepted ? 'You must agree to the Terms of Service and Privacy Policy' : null;
+
+  const isFormValid =
+    isNameValid &&
+    isEmailValid &&
+    isPasswordLengthValid &&
+    isConfirmMatch &&
+    isAdultConfirmed &&
+    isTermsAccepted;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -348,6 +361,54 @@ export default function RegisterPage() {
                       </button>
                     </div>
                     {confirmError && <p className="text-[11px] text-destructive font-medium">{confirmError}</p>}
+                  </div>
+
+                  {/* Compliance & Consent Controls (DPDP Act 2023) */}
+                  <div className="space-y-2.5 pt-1 border-t border-border/40">
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-muted-foreground select-none">
+                      <input
+                        type="checkbox"
+                        checked={isAdultConfirmed}
+                        onChange={(e) => setIsAdultConfirmed(e.target.checked)}
+                        className="mt-0.5 rounded border-border/80 bg-background text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <span>
+                        I confirm I am <strong className="text-foreground font-semibold">18 years of age or older</strong> (required under DPDP Act).
+                      </span>
+                    </label>
+                    {adultError && <p className="text-[11px] text-destructive font-medium pl-6">{adultError}</p>}
+
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-muted-foreground select-none">
+                      <input
+                        type="checkbox"
+                        checked={isTermsAccepted}
+                        onChange={(e) => setIsTermsAccepted(e.target.checked)}
+                        className="mt-0.5 rounded border-border/80 bg-background text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <span>
+                        I agree to the{' '}
+                        <Link href="/terms" target="_blank" className="text-primary hover:underline font-semibold">
+                          Terms &amp; Conditions
+                        </Link>{' '}
+                        and{' '}
+                        <Link href="/privacy" target="_blank" className="text-primary hover:underline font-semibold">
+                          Privacy Policy
+                        </Link>.
+                      </span>
+                    </label>
+                    {termsError && <p className="text-[11px] text-destructive font-medium pl-6">{termsError}</p>}
+
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-muted-foreground select-none">
+                      <input
+                        type="checkbox"
+                        checked={isMarketingOptIn}
+                        onChange={(e) => setIsMarketingOptIn(e.target.checked)}
+                        className="mt-0.5 rounded border-border/80 bg-background text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                      />
+                      <span>
+                        (Optional) Send me product updates, algorithm changes, and feature alerts.
+                      </span>
+                    </label>
                   </div>
 
                   <Button

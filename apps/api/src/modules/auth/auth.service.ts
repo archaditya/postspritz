@@ -37,6 +37,7 @@ export class AuthService {
       ]);
       user.email_verified = true;
       user.avatar_url = decoded.picture || null;
+      await this.provisionDefaultFreePlan(user.id);
     }
 
     if (user.status === 'suspended' || user.status === 'deactivated') {
@@ -71,6 +72,26 @@ export class AuthService {
     });
   }
 
+  private async provisionDefaultFreePlan(userId: string): Promise<void> {
+    try {
+      const planRes = await query(`SELECT id FROM plans WHERE name = 'free' LIMIT 1`);
+      const freePlan = planRes.rows[0];
+      if (freePlan) {
+        await query(
+          `INSERT INTO subscriptions (
+            user_id, plan_id, payment_gateway, gateway_subscription_id,
+            status, billing_cycle, current_period_start, current_period_end
+          ) VALUES ($1, $2, 'cashfree', $3, 'active', 'monthly', NOW(), NOW() + INTERVAL '100 years')
+          ON CONFLICT DO NOTHING`,
+          [userId, freePlan.id, `sub_free_${userId}`]
+        );
+        logger.info({ userId, planId: freePlan.id }, 'Provisioned default free starter subscription for new user');
+      }
+    } catch (err: any) {
+      logger.warn({ userId, err: err.message }, 'Failed to auto-provision default free starter plan');
+    }
+  }
+
   async register(input: RegisterInput) {
     const existing = await this.authRepo.findByEmail(input.email);
     if (existing) {
@@ -90,6 +111,8 @@ export class AuthService {
       emailVerifyToken,
       emailVerifyExpires
     });
+
+    await this.provisionDefaultFreePlan(user.id);
 
     const accessToken = this.generateAccessToken({
       userId: user.id,

@@ -11,6 +11,8 @@ const controller = new SocialAccountsController();
 // OAuth initiation & listing require user authentication
 router.get('/', authenticate, validateQuery(listAccountsQuerySchema), controller.list);
 router.get('/:platform/auth-url', authenticate, controller.getAuthUrl);
+router.get('/connect/:platform', authenticate, controller.getAuthUrl);
+router.get('/:platform/connect', authenticate, controller.getAuthUrl);
 router.delete('/:id', authenticate, controller.disconnect);
 
 // Callback can be hit directly by OAuth vendor redirects or via POST

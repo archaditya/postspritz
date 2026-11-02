@@ -263,7 +263,7 @@ export function SiteChrome({
       {/* Footer */}
       <footer className="border-t border-border/60 bg-card/40 backdrop-blur-sm w-full">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
-          <div className="grid gap-8 grid-cols-1 md:grid-cols-4">
+          <div className="grid gap-8 grid-cols-1 md:grid-cols-5">
             <div className="md:col-span-2">
               <Link href="/" className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-[#17191C] border border-primary/30 flex items-center justify-center p-1 shadow-md shadow-primary/20">
@@ -284,6 +284,13 @@ export function SiteChrome({
               <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Publishing mesh operational &amp; resilient</span>
+              </div>
+
+              {/* Grievance Redressal Mandate (DPDP Act s.8(9)) */}
+              <div className="mt-4 p-3 rounded-xl border border-border/50 bg-background/50 text-[11px] text-muted-foreground space-y-0.5 max-w-sm">
+                <p className="font-semibold text-foreground">Grievance Officer (DPDP Act 2023):</p>
+                <p>Compliance Cell • <a href="mailto:grievance@postspritz.com" className="text-primary hover:underline">grievance@postspritz.com</a></p>
+                <p className="text-[10px] text-muted-foreground/80">Acknowledgment SLA: 48 hours • Resolution: 30 days</p>
               </div>
             </div>
 
@@ -312,6 +319,42 @@ export function SiteChrome({
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Legal &amp; Privacy
+              </p>
+              <ul className="space-y-2 text-xs text-muted-foreground">
+                <li>
+                  <Link href="/privacy" className="hover:text-foreground transition-colors">
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terms" className="hover:text-foreground transition-colors">
+                    Terms &amp; Conditions
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/refund" className="hover:text-foreground transition-colors">
+                    Refund &amp; Cancellation
+                  </Link>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('postspritz:open-cookie-settings'));
+                      }
+                    }}
+                    className="hover:text-foreground transition-colors text-left"
+                  >
+                    Cookie Settings
+                  </button>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                 Access
               </p>
               <ul className="space-y-2 text-xs text-muted-foreground">
@@ -322,7 +365,7 @@ export function SiteChrome({
                 </li>
                 <li>
                   <Link href="/register" className="hover:text-foreground transition-colors">
-                    Create Account
+                    Create Free Account
                   </Link>
                 </li>
                 <li>
@@ -336,12 +379,22 @@ export function SiteChrome({
 
           <div className="mt-10 border-t border-border/60 pt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
             <p>© {new Date().getFullYear()} PostSpritz Inc. All rights reserved.</p>
-            <div className="flex gap-4">
-              <Link href="/contact" className="hover:text-foreground transition-colors">
-                Contact &amp; Support
+            <div className="flex flex-wrap gap-4 items-center">
+              <Link href="/privacy" className="hover:text-foreground transition-colors">
+                Privacy
               </Link>
               <span>•</span>
-              <span>API Pass-Through Architecture</span>
+              <Link href="/terms" className="hover:text-foreground transition-colors">
+                Terms
+              </Link>
+              <span>•</span>
+              <Link href="/refund" className="hover:text-foreground transition-colors">
+                Refunds
+              </Link>
+              <span>•</span>
+              <Link href="/contact" className="hover:text-foreground transition-colors">
+                Grievance &amp; Contact
+              </Link>
             </div>
           </div>
         </div>

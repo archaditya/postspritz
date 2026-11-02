@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, Loader2, Sparkles, ShieldCheck } from 'lucide-react';
 import { PublicChrome } from '../../components/PublicChrome';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -23,6 +23,13 @@ const contactChannels = [
     desc: 'Within 4-12 hours for all active accounts',
     actionText: 'Priority queue available',
     href: '#',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Grievance Officer (DPDP Act)',
+    desc: 'grievance@postspritz.com • SLA: 48h acknowledgment',
+    actionText: 'Formal Data Redressal Desk',
+    href: 'mailto:grievance@postspritz.com',
   },
   {
     icon: MapPin,

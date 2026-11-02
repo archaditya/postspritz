@@ -28,6 +28,23 @@ services:
       timeout: 3s
       retries: 5
 
+  ai-service:
+    build:
+      context: apps/ai-service
+      dockerfile: Dockerfile
+    container_name: postspritz_ai
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PORT=8000
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   api:
     build:
       context: .
@@ -41,6 +58,7 @@ services:
       - PORT=4000
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postspritz}:${POSTGRES_PASSWORD:-postspritz_secure_pwd_2026}@postgres:5432/${POSTGRES_DB:-postspritz}
       - REDIS_URL=redis://redis:6379
+      - AI_SERVICE_URL=http://ai-service:8000
       - API_BASE_URL=https://PostSpiritz.archadi.dev
       - WEB_BASE_URL=https://PostSpiritz.archadi.dev
     expose:
@@ -50,6 +68,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ai-service:
+        condition: service_started
 
   web:
     build:

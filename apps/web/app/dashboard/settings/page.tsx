@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Key, Bell, CheckCircle2, AlertTriangle, Save, User as UserIcon, History, RefreshCw, Clock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Shield, Key, Bell, CheckCircle2, AlertTriangle, Save, User as UserIcon, History, RefreshCw, Clock, Trash2 } from 'lucide-react';
 import { useAuth } from '../../../lib/hooks/useAuth';
 import { apiClient } from '../../../lib/api-client';
 import { Button } from '../../../components/ui/button';
@@ -11,9 +12,11 @@ import { Switch } from '../../../components/ui/switch';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
 import { Avatar } from '../../../components/ui/avatar';
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../../components/ui/dialog';
 
 export default function SettingsPage() {
-  const { user, updateProfile } = useAuth();
+  const router = useRouter();
+  const { user, updateProfile, logout } = useAuth();
 
   // Profile Form States
   const [fullName, setFullName] = useState('');
@@ -53,6 +56,27 @@ export default function SettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  // Deletion Modal State (DPDP Right to Erasure)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmationText.trim().toLowerCase() !== 'delete') return;
+
+    setIsDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      await apiClient.delete('/users/me');
+      await logout();
+      router.push('/login?deleted=true');
+    } catch (err: any) {
+      setDeleteError(err?.response?.data?.message || err?.message || 'Failed to delete account. Please try again.');
+      setIsDeletingAccount(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -547,6 +571,87 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Danger Zone: Account Deletion (DPDP Act s.8(7) & s.11–14 Right to Erasure) */}
+      <Card className="rounded-2xl border border-destructive/30 bg-destructive/5 shadow-none">
+        <CardHeader className="pb-3 border-b border-destructive/20 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-bold text-destructive flex items-center gap-2">
+            <Trash2 className="w-4 h-4" /> Danger Zone • Right to Erasure (DPDP Act)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Under Section 8(7) of the Digital Personal Data Protection Act, 2023, you have the right to request deletion of your account and personal data. Deleting your account will immediately revoke all connected social tokens, cancel active subscriptions, and schedule all stored data for permanent erasure following a 30-day retention grace backoff.
+          </p>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteModalOpen(true)}
+            className="text-xs font-semibold gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Delete My Account &amp; Personal Data
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <div className="space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2 text-base font-bold">
+              <AlertTriangle className="w-5 h-5 text-destructive" /> Permanently Delete Account?
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              This action cannot be undone. All your scheduled posts, media files, and OAuth credentials across Facebook, Instagram, LinkedIn, and X will be deactivated immediately and purged.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+              {deleteError}
+            </div>
+          )}
+
+          <div className="space-y-2 py-2">
+            <label className="text-xs font-medium text-foreground">
+              Type <strong className="text-destructive font-mono font-bold">DELETE</strong> to confirm:
+            </label>
+            <Input
+              value={deleteConfirmationText}
+              onChange={(e) => setDeleteConfirmationText(e.target.value)}
+              placeholder="DELETE"
+              className="text-xs h-9 bg-background font-mono"
+            />
+          </div>
+
+          <DialogFooter className="flex flex-row justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isDeletingAccount}
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setDeleteConfirmationText('');
+                setDeleteError(null);
+              }}
+              className="text-xs h-8"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deleteConfirmationText.trim().toLowerCase() !== 'delete' || isDeletingAccount}
+              onClick={handleDeleteAccount}
+              className="text-xs h-8 font-semibold"
+            >
+              {isDeletingAccount ? 'Erasing Data...' : 'Confirm Deletion'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </Dialog>
     </div>
   );
 }

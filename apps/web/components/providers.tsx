@@ -7,6 +7,7 @@ import { Provider as ReduxProvider } from 'react-redux';
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { store } from '../lib/store';
 import { SSEProvider } from '../lib/context/SSEContext';
+import { CookieBanner } from './CookieBanner';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -32,6 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           disableTransitionOnChange
         >
           <SSEProvider>{children}</SSEProvider>
+          <CookieBanner />
         </NextThemesProvider>
         {process.env.NODE_ENV !== 'production' && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>
